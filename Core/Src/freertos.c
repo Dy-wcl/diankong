@@ -59,14 +59,14 @@ osThreadId_t dr16Handle;
 const osThreadAttr_t dr16_attributes = {
   .name = "dr16",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for vt13 */
 osThreadId_t vt13Handle;
 const osThreadAttr_t vt13_attributes = {
   .name = "vt13",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for vofa */
 osThreadId_t vofaHandle;
@@ -75,18 +75,18 @@ const osThreadAttr_t vofa_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for imu */
-osThreadId_t imuHandle;
-const osThreadAttr_t imu_attributes = {
-  .name = "imu",
+/* Definitions for imu_can */
+osThreadId_t imu_canHandle;
+const osThreadAttr_t imu_can_attributes = {
+  .name = "imu_can",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for lx824 */
 osThreadId_t lx824Handle;
 const osThreadAttr_t lx824_attributes = {
   .name = "lx824",
-  .stack_size = 128 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for I6X */
@@ -95,6 +95,13 @@ const osThreadAttr_t I6X_attributes = {
   .name = "I6X",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for imu_485 */
+osThreadId_t imu_485Handle;
+const osThreadAttr_t imu_485_attributes = {
+  .name = "imu_485",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -106,9 +113,10 @@ void StartDefaultTask(void *argument);
 void dr16_task(void *argument);
 void vt13_task(void *argument);
 void vofa_task(void *argument);
-void imu_task(void *argument);
+void imu_can_task(void *argument);
 void lx824_task(void *argument);
 void I6X_task(void *argument);
+void imu_485_task(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -168,14 +176,17 @@ void MX_FREERTOS_Init(void) {
   /* creation of vofa */
   vofaHandle = osThreadNew(vofa_task, NULL, &vofa_attributes);
 
-  /* creation of imu */
-  imuHandle = osThreadNew(imu_task, NULL, &imu_attributes);
+  /* creation of imu_can */
+  imu_canHandle = osThreadNew(imu_can_task, NULL, &imu_can_attributes);
 
   /* creation of lx824 */
   lx824Handle = osThreadNew(lx824_task, NULL, &lx824_attributes);
 
   /* creation of I6X */
   I6XHandle = osThreadNew(I6X_task, NULL, &I6X_attributes);
+
+  /* creation of imu_485 */
+  imu_485Handle = osThreadNew(imu_485_task, NULL, &imu_485_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -259,22 +270,22 @@ __weak void vofa_task(void *argument)
   /* USER CODE END vofa_task */
 }
 
-/* USER CODE BEGIN Header_imu_task */
+/* USER CODE BEGIN Header_imu_can_task */
 /**
-* @brief Function implementing the imu thread.
+* @brief Function implementing the imu_can thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_imu_task */
-__weak void imu_task(void *argument)
+/* USER CODE END Header_imu_can_task */
+__weak void imu_can_task(void *argument)
 {
-  /* USER CODE BEGIN imu_task */
+  /* USER CODE BEGIN imu_can_task */
   /* Infinite loop */
   for(;;)
   {
     osDelay(1);
   }
-  /* USER CODE END imu_task */
+  /* USER CODE END imu_can_task */
 }
 
 /* USER CODE BEGIN Header_lx824_task */
@@ -311,6 +322,24 @@ __weak void I6X_task(void *argument)
     osDelay(1);
   }
   /* USER CODE END I6X_task */
+}
+
+/* USER CODE BEGIN Header_imu_485_task */
+/**
+* @brief Function implementing the imu_485 thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_imu_485_task */
+__weak void imu_485_task(void *argument)
+{
+  /* USER CODE BEGIN imu_485_task */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END imu_485_task */
 }
 
 /* Private application code --------------------------------------------------*/

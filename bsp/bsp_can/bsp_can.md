@@ -1,143 +1,157 @@
 # bsp_can
 
-`bsp_can` 既提供对象式 `STM32CAN_t` 接口，也保留了一套旧接口兼容层。新代码优先走对象式：`STM32CAN_Init` -> `STM32CAN_Start` -> `STM32CAN_ConfigFilter` -> `STM32CAN_Send / STM32CAN_SendDjiCurrent`。接收时 HAL FIFO0/FIFO1 中断会把帧填成 `BSP_CAN_Frame_t`，先给对象回调，没注册再回退到旧 weak callback。
+`bsp_can` 将 STM32 Classical CAN 封装为对象式接口。模块只负责 HAL 句柄绑定、标准帧收发、过滤器配置和固定容量 RX 广播，不包含任何电机协议或旧式 weak callback。
 
-## 这份 BSP 负责什么
+## 模块职责
 
-- 统一 CAN 句柄映射：`BSP_CAN_get_id`
-- 统一 RX 帧结构：`BSP_CAN_Frame_t`
-- 新旧两套接收入口共存
-- 兼容旧项目的 `CAN_Init`、`canx_receive`、`dj_CAN_Send_Data` 等接口
+- 使用 `STM32CAN_t` 管理一个 HAL CAN 外设。
+- 将 `CAN1/CAN2` 映射为稳定的 `BSP_CAN_t` 逻辑编号。
+- 发送 1 到 8 字节的标准数据帧。
+- 把 HAL RX 数据转换为 `BSP_CAN_Frame_t` 快照。
+- 按注册顺序向最多四个 RX 订阅者广播同一帧。
 
-## 常量与数据结构
+DJI、DM 等协议打包和帧 ID 路由属于对应业务模块，不应放入 CAN BSP。
 
-| 名称                              | 作用                        | 跳转                            |
-| --------------------------------- | --------------------------- | ------------------------------- |
-| `CAN_DATA_SIZE`                   | CAN 数据区长度，固定 8 字节 | [bsp_can.h:13](./bsp_can.h#L13) |
-| `CAN_FILTER(x)`                   | 过滤器编号打包宏            | [bsp_can.h:17](./bsp_can.h#L17) |
-| `CAN_FIFO_0 / CAN_FIFO_1`         | FIFO 选择                   | [bsp_can.h:20](./bsp_can.h#L20) |
-| `CAN_STDID / CAN_EXTID`           | 标准帧 / 扩展帧             | [bsp_can.h:24](./bsp_can.h#L24) |
-| `CAN_DATA_TYPE / CAN_REMOTE_TYPE` | 数据帧 / 远程帧             | [bsp_can.h:28](./bsp_can.h#L28) |
-| `BSP_CAN_t`                       | BSP 逻辑 CAN 编号           | [bsp_can.h:33](./bsp_can.h#L33) |
-| `BSP_CAN_Frame_t`                 | RX 帧统一描述               | [bsp_can.h:48](./bsp_can.h#L48) |
-| `STM32CAN_RxCallback_t`           | 对象式 RX 回调              | [bsp_can.h:62](./bsp_can.h#L62) |
-| `STM32CAN_t`                      | CAN BSP 控制块              | [bsp_can.h:67](./bsp_can.h#L67) |
+## 数据结构
 
- [bsp_can.h:77](./bsp_can.c#133)
-## 常用用法
+| 名称 | 作用 |
+| --- | --- |
+| `BSP_CAN_t` | BSP 逻辑 CAN 编号 |
+| `BSP_CAN_Frame_t` | RX 帧快照，包含 ID、IDE、RTR、FIFO、DLC 和数据 |
+| `STM32CAN_RxCallback_t` | 带 `context` 的订阅回调类型 |
+| `STM32CAN_RxSubscriber_t` | 单个回调与上下文订阅槽 |
+| `STM32CAN_t` | CAN 句柄、订阅表、启动状态和错误状态控制块 |
 
-### 1. 先初始化再启动
+关键限制：
+
+- `BSP_CAN_DATA_SIZE` 固定为 8 字节。
+- `STM32CAN_RX_SUBSCRIBER_CAPACITY` 固定为 4。
+- 不使用堆内存，不支持运行期退订。
+- `context` 由调用方持有，其生命周期必须覆盖 CAN 运行期。
+
+## 初始化与订阅
+
+推荐顺序为：绑定对象、配置过滤器、注册订阅者、启动 CAN。
 
 ```c
 static STM32CAN_t can1;
 
-static void can1_rx_cb(STM32CAN_t *self, const BSP_CAN_Frame_t *frame)
+static void app_can_rx(STM32CAN_t *self,
+                       const BSP_CAN_Frame_t *frame,
+                       void *context)
 {
-    // frame->id_ / frame->size_ / frame->data_
+  (void)self;
+  (void)context;
+
+  if ((frame->ide_ == CAN_ID_STD) &&
+      (frame->rtr_ == CAN_RTR_DATA))
+  {
+    // 根据 frame->id_ 和 frame->size_ 解析数据。
+  }
 }
 
-void app_can1_init(void)
+err_t app_can_init(const CAN_FilterTypeDef *filter)
 {
-    STM32CAN_Init(&can1, &hcan1, can1_rx_cb);
-    STM32CAN_ConfigFilter(&can1, &filter);
-    STM32CAN_Start(&can1);
+  err_t error = STM32CAN_Init(&can1, &hcan1);
+  if (error != OK)
+  {
+    return error;
+  }
+
+  error = STM32CAN_ConfigFilter(&can1, filter);
+  if (error != OK)
+  {
+    return error;
+  }
+
+  error = STM32CAN_SubscribeRx(&can1, app_can_rx, NULL);
+  if (error != OK)
+  {
+    return error;
+  }
+
+  return STM32CAN_Start(&can1);
 }
 ```
 
-注意点：
+订阅规则：
 
-- `STM32CAN_Init` 只负责绑定句柄和回调，不会自动启动 CAN。
-- `STM32CAN_Start` 会开启 FIFO0/FIFO1 消息挂起中断。
-- 过滤器仍由 CubeMX/HAL 配置决定，`STM32CAN_ConfigFilter` 只是把 `CAN_FilterTypeDef` 送给 HAL。
+- 订阅只允许在 `STM32CAN_Start()` 成功前完成。
+- 启动后注册返回 `STATE_ERR`。
+- 相同 `callback + context` 重复注册保持幂等并返回 `OK`。
+- 第五个不同订阅者返回 `FULL`。
+- 回调按注册顺序执行。
 
-### 2. 发送标准帧 / DJI 电流帧
+## 发送数据
+
+新代码应持有 `STM32CAN_t *` 并使用 `STM32CAN_Send()`：
 
 ```c
-uint8_t data[8] = {0x01, 0x02, 0x03, 0x04};
-STM32CAN_Send(&can1, 0x123, data, 4);
-
-int16_t current[4] = {1000, 1000, 1000, 1000};
-STM32CAN_SendDjiCurrent(&can1, 0x200, current);
+const uint8_t data[] = {0x11U, 0x22U, 0x33U};
+err_t error = STM32CAN_Send(&can1, 0x123U, data, sizeof(data));
 ```
 
-注意点：
-
-- 标准帧 ID 不能超过 `0x7FF`。
-- 单帧数据长度不能超过 8 字节。
-- `STM32CAN_SendDjiCurrent` 按高字节在前打包 4 路电流。
-
-### 3. 接收帧
-
-对象式回调优先级最高。HAL 收到帧后会先填成 `BSP_CAN_Frame_t`，如果对象注册了回调，就走 `STM32CAN_RxCallback_t`；否则回退到 `dm_can1_rx_callback`、`dj_motor_can1_rx_callback` 等旧接口。
+仍只持有 HAL 句柄的边界代码可使用 `STM32CAN_SendByHandle()`：
 
 ```c
-static void can1_rx_cb(STM32CAN_t *self, const BSP_CAN_Frame_t *frame)
-{
-    if (frame->size_ == 8U)
-    {
-        // 解析标准 8 字节报文
-    }
-}
+err_t error = STM32CAN_SendByHandle(&hcan1,
+                                    0x123U,
+                                    data,
+                                    sizeof(data));
 ```
 
-### 4. 旧接口兼容层
+`STM32CAN_SendByHandle()` 不是独立发送实现。它先查找已由 `STM32CAN_Init()` 注册的对象，再复用 `STM32CAN_Send()`；句柄未注册时返回 `NOT_FOUND`。
 
-这些接口主要给旧工程和历史代码使用：
+发送约束：
 
-- `CAN_Init`
-- `CAN_Filter_Mask_Config_16bit`
-- `CAN_Filter_Mask_Config_32bit`
-- `dj_CAN_Send_Data`
-- `CAN_Send_Data_X8`
-- `canx_receive`
-- `dm_can1_rx_callback`
-- `dm_can2_rx_callback`
-- `dj_motor_can1_rx_callback`
-- `dj_motor_can2_rx_callback`
-- `dm_can_send_data`
+- 仅支持标准数据帧，ID 范围为 `0x000..0x7FF`。
+- DLC 范围为 1 到 8 字节。
+- BSP 最多尝试三次空邮箱发送。
+- 三次均无空邮箱返回 `BUSY`；存在邮箱但 HAL 发送失败返回 `FAILED`。
 
-如果你在新代码里写功能，优先用对象式接口；兼容层更适合保留既有业务，不建议再扩展新逻辑。
+## 接收路径
+
+FIFO0 和 FIFO1 共用同一条分发路径：
+
+```text
+HAL_CAN_RxFifoXMsgPendingCallback
+  -> HAL_CAN_GetRxMessage
+  -> 构造 BSP_CAN_Frame_t
+  -> STM32CAN_HandleRxFrame
+  -> 按顺序调用全部订阅者
+```
+
+RX 帧只复制 DLC 指定的有效数据，剩余字节清零。HAL 读取失败或 DLC 超过 8 时不会调用订阅者，并通过 `STM32CAN_GetLastError()` 暴露错误。
+
+订阅回调运行在 HAL 中断上下文，必须保持非阻塞，不应执行日志输出、等待、动态分配或复杂协议流程。需要任务级处理时，由订阅者自行拷贝帧并通知任务。
 
 ## 接口速查
 
-### 反查与对象式接口
+| 函数 | 作用 |
+| --- | --- |
+| `BSP_CAN_get_id` | 将 HAL Instance 转换为 BSP 逻辑编号 |
+| `STM32CAN_Init` | 绑定并注册 CAN 对象 |
+| `STM32CAN_SubscribeRx` | 在启动前添加 RX 订阅者 |
+| `STM32CAN_Start` | 启动外设并开启 FIFO0/FIFO1 通知 |
+| `STM32CAN_ConfigFilter` | 应用 HAL 过滤器配置 |
+| `STM32CAN_Send` | 通过对象发送标准数据帧 |
+| `STM32CAN_SendByHandle` | 通过已注册 HAL 句柄适配发送 |
+| `STM32CAN_HandleRxFrame` | 向全部订阅者广播帧快照 |
+| `STM32CAN_GetLastError` | 获取最近一次 BSP 错误 |
 
-| 函数                      | 作用                          | 跳转                                                |
-| ------------------------- | ----------------------------- | --------------------------------------------------- |
-| `BSP_CAN_get_id`          | `CAN_TypeDef *` 反查 BSP 编号 | [实现](./bsp_can.c#L14) / [声明](./bsp_can.h#L92)   |
-| `STM32CAN_Init`           | 绑定 CAN 控制块               | [实现](./bsp_can.c#L274) / [声明](./bsp_can.h#L95)  |
-| `STM32CAN_Start`          | 启动 CAN 并开通知             | [实现](./bsp_can.c#L317) / [声明](./bsp_can.h#L100) |
-| `STM32CAN_ConfigFilter`   | 配置 HAL 滤波器               | [实现](./bsp_can.c#L336) / [声明](./bsp_can.h#L103) |
-| `STM32CAN_Send`           | 发送标准帧                    | [实现](./bsp_can.c#L366) / [声明](./bsp_can.h#L107) |
-| `STM32CAN_SendDjiCurrent` | 发送 DJI 电流帧               | [实现](./bsp_can.c#L382) / [声明](./bsp_can.h#L113) |
-| `STM32CAN_SetRxCallback`  | 更新对象式 RX 回调            | [实现](./bsp_can.c#L414) / [声明](./bsp_can.h#L118) |
-| `STM32CAN_GetLastError`   | 读取最近错误码                | [实现](./bsp_can.c#L426) / [声明](./bsp_can.h#L122) |
+## 已移除接口
 
-### 兼容旧接口
+以下接口不再提供：
 
-| 函数                           | 作用                    | 跳转                                                |
-| ------------------------------ | ----------------------- | --------------------------------------------------- |
-| `CAN_Init`                     | 启动 CAN 并开 FIFO 中断 | [实现](./bsp_can.c#L439) / [声明](./bsp_can.h#L125) |
-| `CAN_Filter_Mask_Config_16bit` | 16 位掩码滤波器         | [实现](./bsp_can.c#L446) / [声明](./bsp_can.h#L128) |
-| `CAN_Filter_Mask_Config_32bit` | 32 位掩码滤波器         | [实现](./bsp_can.c#L465) / [声明](./bsp_can.h#L133) |
-| `dj_CAN_Send_Data`             | 发送 DJI 四路电流控制帧 | [实现](./bsp_can.c#L483) / [声明](./bsp_can.h#L137) |
-| `CAN_Send_Data_X8`             | 发送 8 字节全零标准帧   | [实现](./bsp_can.c#L497) / [声明](./bsp_can.h#L142) |
-| `canx_receive`                 | 从指定 FIFO 读一帧      | [实现](./bsp_can.c#L505) / [声明](./bsp_can.h#L145) |
-| `dm_can1_rx_callback`          | CAN1 达妙电机弱回调     | [实现](./bsp_can.c#L530) / [声明](./bsp_can.h#L149) |
-| `dm_can2_rx_callback`          | CAN2 达妙电机弱回调     | [实现](./bsp_can.c#L539) / [声明](./bsp_can.h#L151) |
-| `dj_motor_can1_rx_callback`    | CAN1 DJI 电机弱回调     | [实现](./bsp_can.c#L548) / [声明](./bsp_can.h#L153) |
-| `dj_motor_can2_rx_callback`    | CAN2 DJI 电机弱回调     | [实现](./bsp_can.c#L557) / [声明](./bsp_can.h#L155) |
-| `dm_can_send_data`             | 通用 CAN 标准帧发送接口 | [实现](./bsp_can.c#L566) / [声明](./bsp_can.h#L158) |
+- `STM32CAN_SendDjiCurrent`
+- `STM32CAN_SetRxCallback`
+- `CAN_Init`
+- `CAN_Filter_Mask_Config_16bit`
+- `CAN_Filter_Mask_Config_32bit`
+- `CAN_Send_Data_X8`
+- `canx_receive`
+- `dm_can_send_data`
+- `dm_can1_rx_callback` / `dm_can2_rx_callback`
+- `dj_motor_can1_rx_callback` / `dj_motor_can2_rx_callback`
 
-### HAL 回调入口
-
-| 函数                                | 作用              | 跳转                     |
-| ----------------------------------- | ----------------- | ------------------------ |
-| `HAL_CAN_RxFifo0MsgPendingCallback` | FIFO0 RX 分发入口 | [实现](./bsp_can.c#L645) |
-| `HAL_CAN_RxFifo1MsgPendingCallback` | FIFO1 RX 分发入口 | [实现](./bsp_can.c#L651) |
-
-## 一句话记忆
-
-- 新代码优先走对象式 `STM32CAN_t`。
-- 旧代码还能用兼容层，但别再把新逻辑堆进去。
-- RX 帧先统一成 `BSP_CAN_Frame_t`，再决定是对象回调还是旧 weak 回调。
+DJI 电流发送统一由 `modules/motor/dj_motor` 提供的对象式 `dj_CAN_Send_Data()` 完成。
