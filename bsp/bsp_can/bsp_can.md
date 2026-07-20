@@ -106,8 +106,8 @@ err_t error = STM32CAN_SendByHandle(&hcan1,
 
 - 仅支持标准数据帧，ID 范围为 `0x000..0x7FF`。
 - DLC 范围为 1 到 8 字节。
-- BSP 最多尝试三次空邮箱发送。
-- 三次均无空邮箱返回 `BUSY`；存在邮箱但 HAL 发送失败返回 `FAILED`。
+- 发送不排队、不缓存旧帧，也不在本周期内重试。
+- 无空邮箱立即返回 `BUSY`；HAL 发送失败返回 `FAILED`。调用方应在下一控制周期使用最新状态重新组帧。
 
 ## 接收路径
 
@@ -154,4 +154,5 @@ RX 帧只复制 DLC 指定的有效数据，剩余字节清零。HAL 读取失�
 - `dm_can1_rx_callback` / `dm_can2_rx_callback`
 - `dj_motor_can1_rx_callback` / `dj_motor_can2_rx_callback`
 
-DJI 电流发送统一由 `modules/motor/dj_motor` 提供的对象式 `dj_CAN_Send_Data()` 完成。
+DJI 命令发送统一由 `modules/motor/dj_motor` 的
+`dj_motor_set_command()` 与 `dj_motor_send_group()` 完成。

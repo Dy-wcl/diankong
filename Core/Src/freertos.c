@@ -59,14 +59,14 @@ osThreadId_t dr16Handle;
 const osThreadAttr_t dr16_attributes = {
   .name = "dr16",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityHigh,
 };
 /* Definitions for vt13 */
 osThreadId_t vt13Handle;
 const osThreadAttr_t vt13_attributes = {
   .name = "vt13",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityHigh,
 };
 /* Definitions for vofa */
 osThreadId_t vofaHandle;
@@ -80,7 +80,7 @@ osThreadId_t imu_canHandle;
 const osThreadAttr_t imu_can_attributes = {
   .name = "imu_can",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityHigh,
 };
 /* Definitions for lx824 */
 osThreadId_t lx824Handle;
@@ -94,12 +94,33 @@ osThreadId_t I6XHandle;
 const osThreadAttr_t I6X_attributes = {
   .name = "I6X",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityHigh,
 };
 /* Definitions for imu_485 */
 osThreadId_t imu_485Handle;
 const osThreadAttr_t imu_485_attributes = {
   .name = "imu_485",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityHigh,
+};
+/* Definitions for gimbal */
+osThreadId_t gimbalHandle;
+const osThreadAttr_t gimbal_attributes = {
+  .name = "gimbal",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for chassis */
+osThreadId_t chassisHandle;
+const osThreadAttr_t chassis_attributes = {
+  .name = "chassis",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for joint */
+osThreadId_t jointHandle;
+const osThreadAttr_t joint_attributes = {
+  .name = "joint",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
@@ -117,12 +138,17 @@ void imu_can_task(void *argument);
 void lx824_task(void *argument);
 void I6X_task(void *argument);
 void imu_485_task(void *argument);
+void gimbal_task(void *argument);
+void chassis_task(void *argument);
+void joint_task(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /* Hook prototypes */
 void configureTimerForRunTimeStats(void);
 unsigned long getRunTimeCounterValue(void);
+void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName);
+void vApplicationMallocFailedHook(void);
 
 /* USER CODE BEGIN 1 */
 /* Functions needed when configGENERATE_RUN_TIME_STATS is on */
@@ -136,6 +162,29 @@ __weak unsigned long getRunTimeCounterValue(void)
 return 0;
 }
 /* USER CODE END 1 */
+
+/* USER CODE BEGIN 4 */
+// 栈溢出钩子函数
+void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName)
+{
+  (void)xTask;
+  (void)pcTaskName;
+  taskDISABLE_INTERRUPTS();
+  for (;;) {
+  }
+}
+/* USER CODE END 4 */
+
+/* USER CODE BEGIN 5 */
+// 内存分配失败钩子函数
+void vApplicationMallocFailedHook(void)
+{
+  taskDISABLE_INTERRUPTS();
+  for (;;)
+  {
+  }
+}
+/* USER CODE END 5 */
 
 /**
   * @brief  FreeRTOS initialization
@@ -187,6 +236,15 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of imu_485 */
   imu_485Handle = osThreadNew(imu_485_task, NULL, &imu_485_attributes);
+
+  /* creation of gimbal */
+  gimbalHandle = osThreadNew(gimbal_task, NULL, &gimbal_attributes);
+
+  /* creation of chassis */
+  chassisHandle = osThreadNew(chassis_task, NULL, &chassis_attributes);
+
+  /* creation of joint */
+  jointHandle = osThreadNew(joint_task, NULL, &joint_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -340,6 +398,60 @@ __weak void imu_485_task(void *argument)
     osDelay(1);
   }
   /* USER CODE END imu_485_task */
+}
+
+/* USER CODE BEGIN Header_gimbal_task */
+/**
+* @brief Function implementing the gimbal thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_gimbal_task */
+__weak void gimbal_task(void *argument)
+{
+  /* USER CODE BEGIN gimbal_task */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END gimbal_task */
+}
+
+/* USER CODE BEGIN Header_chassis_task */
+/**
+* @brief Function implementing the chassis thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_chassis_task */
+__weak void chassis_task(void *argument)
+{
+  /* USER CODE BEGIN chassis_task */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END chassis_task */
+}
+
+/* USER CODE BEGIN Header_joint_task */
+/**
+* @brief Function implementing the joint thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_joint_task */
+__weak void joint_task(void *argument)
+{
+  /* USER CODE BEGIN joint_task */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END joint_task */
 }
 
 /* Private application code --------------------------------------------------*/
