@@ -40,7 +40,10 @@ add_subdirectory(component)
 add_subdirectory(bsp)
 add_subdirectory(arithmetic)
 add_subdirectory(modules)
+add_subdirectory(calculate)
 add_subdirectory(task)
+add_subdirectory(tool)
+
 
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE

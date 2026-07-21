@@ -27,6 +27,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "control_platform.h"
 
 /* USER CODE END Includes */
 
@@ -103,6 +104,7 @@ int main(void)
   MX_USART6_UART_Init();
   MX_TIM10_Init();
   /* USER CODE BEGIN 2 */
+  (void)control_platform_init();
 
   /* USER CODE END 2 */
 
