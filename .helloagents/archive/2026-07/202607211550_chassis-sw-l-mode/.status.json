@@ -1,0 +1,13 @@
+{
+  "status": "completed",
+  "completed": 4,
+  "failed": 0,
+  "skipped": 0,
+  "pending": 0,
+  "uncertain": 0,
+  "total": 4,
+  "done": 4,
+  "percent": 100,
+  "current": "done",
+  "updated_at": "2026-07-21 15:55:00"
+}
