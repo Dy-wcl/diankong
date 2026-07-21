@@ -31,11 +31,17 @@ static err_t servo_write_id(uint8_t servo_id, float value);
 static err_t servo_read_id(uint8_t servo_id, float *out);
 static err_t servo_write_angle(uint8_t servo_id, float value);
 static err_t servo_read_angle(uint8_t servo_id, float *out);
+static err_t servo_write_offset(uint8_t servo_id, float value);
+static err_t servo_read_offset(uint8_t servo_id, float *out);
+static err_t servo_write_torque(uint8_t servo_id, float value);
+static err_t servo_read_torque(uint8_t servo_id, float *out);
 
 //! 舵机命令表：CMD 名 → {写函数, 读函数}
 static const device_cmd_entry_t servo_cmds[] = {
     {"id",    servo_write_id,    servo_read_id},
-    {"angle", servo_write_angle, servo_read_angle},
+    {"angle",  servo_write_angle,  servo_read_angle},
+    {"offset", servo_write_offset, servo_read_offset},
+    {"torque", servo_write_torque, servo_read_torque},
 };
 
 
@@ -93,6 +99,58 @@ static err_t servo_read_angle(uint8_t servo_id, float *out)
   err_t err = LX824_PosRead(lx824, servo_id, &pos);
   if (err == OK) {
     *out = (float)pos;
+  }
+  return err;
+}
+
+//! 写偏差并掉电保存（Cmd 17 调整 + Cmd 18 保存）
+static err_t servo_write_offset(uint8_t servo_id, float value)
+{
+  if ((value < (float)LX824_OFFSET_MIN) || (value > (float)LX824_OFFSET_MAX)) {
+    return OUT_OF_RANGE;
+  }
+  int8_t off = (int8_t)(value + 0.5f);
+  err_t err = LX824_AngleOffsetAdjust(lx824, servo_id, off);
+  if (err != OK) {
+    return err;
+  }
+  return LX824_AngleOffsetWrite(lx824, servo_id);
+}
+
+//! 读偏差（Cmd 19，阻塞式请求-应答）
+static err_t servo_read_offset(uint8_t servo_id, float *out)
+{
+  if (out == NULL) {
+    return PTR_NULL;
+  }
+  int8_t off = 0;
+  err_t err = LX824_AngleOffsetRead(lx824, servo_id, &off);
+  if (err == OK) {
+    *out = (float)off;
+  }
+  return err;
+}
+
+//! 写扭矩加载/释放（Cmd 31，0=释放，1=加载）
+static err_t servo_write_torque(uint8_t servo_id, float value)
+{
+  if ((value < 0.0f) || (value > 1.0f)) {
+    return OUT_OF_RANGE;
+  }
+  uint8_t load = (value > 0.5f) ? 1U : 0U;
+  return LX824_LoadOrUnloadWrite(lx824, servo_id, load);
+}
+
+//! 读扭矩加载/释放状态（Cmd 32，阻塞式请求-应答）
+static err_t servo_read_torque(uint8_t servo_id, float *out)
+{
+  if (out == NULL) {
+    return PTR_NULL;
+  }
+  uint8_t load = 0U;
+  err_t err = LX824_LoadOrUnloadRead(lx824, servo_id, &load);
+  if (err == OK) {
+    *out = (float)load;
   }
   return err;
 }
