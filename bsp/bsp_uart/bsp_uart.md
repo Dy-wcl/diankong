@@ -1,126 +1,84 @@
 # bsp_uart
 
-`bsp_uart` 把 STM32 UART 封装成两条清晰的路径：RX 用 `ReceiveToIdle + 循环 DMA` 切片，TX 用 `双软件缓冲 + 普通 DMA` 续发。这样上层可以把协议解析放到任务里，而不是堆在中断里。
+RX 使用 `ReceiveToIdle + DMA_CIRCULAR`，TX 根据发送语义选择两条独立路径：
 
-## 这份 BSP 负责什么
+| 接口 | DMA 模式 | 用途 |
+| --- | --- | --- |
+| `STM32UARTDoubleBufTx_*` | 硬件 DBM，M0/M1 自动循环切换 | 定长连续数据流 |
+| `STM32UARTFrameTx_*` | `DMA_NORMAL`，一帧发送、一帧等待 | 变长协议帧，每帧只发送一次 |
 
-- RX：`STM32UART_Init` 绑定句柄和接收缓冲，`STM32UART_SetRxDMA` 启动 DMA，`HAL_UARTEx_RxEventCallback` 自动把新字节切成片段。
-- TX：`STM32UARTDoubleBufTx_Init` 绑定两块发送缓冲，`STM32UARTDoubleBufTx_Write` 写入待发送数据，`HAL_UART_TxCpltCallback` 负责推进下一段。
-- 跳转入口：下面每个函数名都直接链接到 `.c/.h` 的位置。
+同一 UART 只能绑定一个 TX 对象，可以同时绑定 RX 对象。实现见 [bsp_uart.c](./bsp_uart.c)，接口见 [bsp_uart.h](./bsp_uart.h)。
 
-## 数据结构
+## 单缓冲循环 RX
 
-| 名称                             | 作用             | 跳转                              |
-| -------------------------------- | ---------------- | --------------------------------- |
-| `BSP_UART_t`                     | BSP 逻辑串口编号 | [bsp_uart.h:13](./bsp_uart.h#L13) |
-| `STM32UART_RxCallback_t`         | RX 数据片段回调  | [bsp_uart.h:40](./bsp_uart.h#L40) |
-| `STM32UART_TxCompleteCallback_t` | TX 完成回调      | [bsp_uart.h:44](./bsp_uart.h#L44) |
-| `BSP_UART_RawData_t`             | 原始缓冲描述     | [bsp_uart.h:48](./bsp_uart.h#L48) |
-| `STM32UART_t`                    | 环形 RX 控制块   | [bsp_uart.h:56](./bsp_uart.h#L56) |
-| `STM32UARTDoubleBufTx_t`         | 双缓冲 TX 控制块 | [bsp_uart.h:69](./bsp_uart.h#L69) |
+`STM32UART_Init()` 绑定 RX 缓冲和接收回调，`STM32UART_SetRxDMA()` 启动循环接收。`HAL_UARTEx_RxEventCallback()` 根据 DMA 计数器切分新增字节，回绕时最多分为两段。对象和缓冲必须长期有效，中断中将新字节交给 FIFO，在任务中解析协议。
 
-## 常用用法
+## 硬件双缓冲连续 TX
 
-### 1. 先把 UART 句柄映射成 BSP 编号
-
-`BSP_UART_get_id()` 会把 `USART1/2/3...` 反查成 BSP 内部编号。新增外设时，先看这个函数的映射表。
-
-### 2. 接收原始串口数据
-
-RX 采用 `环形 DMA + 空闲中断`。`HAL_UARTEx_RxEventCallback()` 不会把整帧协议直接交给你，而是把 DMA 中新增的字节切成一段一段回调给 `STM32UART_RxCallback_t`。
+STM32F405 DBM 的两页共用一个 `NDTR` 重载长度。传输完成时硬件立即切换 `CT`，不等待 CPU 中断。因此本接口始终按完整页连续发送，不支持“pending 为空就精确停止”或两页不同帧长。
 
 ```c
-static uint8_t uart1_rx_buf[128];
-static STM32UART_t uart1_rx;
+static uint8_t tx_pages[2][128];
+static STM32UARTDoubleBufTx_t tx;
 
-static void uart1_rx_cb(uint8_t *data, size_t size)
+static void RefillTxPage(uint8_t *data, size_t size)
 {
-    // 在任务里做协议解析
+  // data 是刚发送完的页。填满 size 字节，供硬件下一轮使用。
+  // 示例保持内容不变，因此会循环发送原有内容。
+  RM_UNUSED(data);
+  RM_UNUSED(size);
 }
 
-void app_uart1_init(void)
+err_t StartStream(void)
 {
-    BSP_UART_RawData_t rx = {uart1_rx_buf, sizeof(uart1_rx_buf)};
-    STM32UART_Init(&uart1_rx, &huart1, rx, uart1_rx_cb);
-    STM32UART_SetRxDMA(&uart1_rx);
+  err_t err = STM32UARTDoubleBufTx_Init(&tx, &huart1,
+      (BSP_UART_RawData_t){tx_pages[0], sizeof(tx_pages[0])},
+      (BSP_UART_RawData_t){tx_pages[1], sizeof(tx_pages[1])}, RefillTxPage);
+  if (err != OK)
+  {
+    return err;
+  }
+  err = STM32UARTDoubleBufTx_SetTxDMA(&tx);
+  if (err != OK)
+  {
+    return err;
+  }
+  // 此处两页均为有效的零数据；实际应用应先填满两页。
+  return STM32UARTDoubleBufTx_Flush(&tx);
 }
 ```
 
-注意点：
+- `SetTxDMA()` 配置 `DMA_CIRCULAR + DBM`、`PAR`、`M0AR`、`M1AR` 和固定 `NDTR`，尚不发送。
+- `Flush()` 调用 `HAL_DMAEx_MultiBufferStart_IT()` 并开启 UART `DMAT`；两页必须都已准备好。运行中再次调用返回 `BUSY`。
+- `Write()` 仅供空闲时启动：长度必须等于页容量，复制同一份数据到两页后调用 `Flush()`。运行中返回 `BUSY`，不会改写 DMA 使用中的页。
+- M0/M1 完成事件均从 DMA 回调进入 `HandleTxComplete()`，读取硬件 `CT` 并把刚完成页交给填充回调。不会重启 DMA，也不会通过 `HAL_UART_TxCpltCallback()` 重复分发。
+- 回调签名变为 `void (*)(uint8_t *data, size_t size)`。回调运行在 DMA ISR 中，只能写传入页；不更新时该页内容会在下一轮重复发送。
+- **最大 DMA 中断延迟 + 回调填充耗时必须小于一页发送时间**。8N1 时一页时间约为 `size × 10 / baud_rate` 秒；高优先级中断和临界区耗时也要计入。超过期限可能写到硬件已重新使用的页。应先在任务中准备数据，在回调中快速复制，不能阻塞等待。
+- 两页须等长、非重叠，容量为 1～65535 字节，位于 DMA 可访问的 SRAM（不能使用 F405 CCM）。不支持 9 位无校验的数据格式。
+- `Stop()` 只能在任务上下文且未进入临界区时调用，只关闭 TX DMA，RX 不受影响。停止可能截断当前页，UART 中已有的字节仍会发出；需要完整单次帧时使用 `FrameTx`。
+- DMA 错误关闭 TX 请求与中断，将 `last_error_` 设为 `FAILED`；任务可重新调用 `SetTxDMA()`，准备两页后再次启动。配置、启动和停止等生命周期操作由一个任务串行管理。
 
-- `huart` 必须已经在 CubeMX 里配置成 RX 可用。
-- `dma_buff_rx_` 指向的缓冲区必须在整个接收期间有效。
-- 回调里最好只做轻量处理，长耗时逻辑放到任务上下文。
+## 变长帧 TX 与模块迁移
 
-### 3. 双缓冲发送
-
-TX 不是硬件双缓冲，而是两块软件缓冲轮流喂给 DMA。`STM32UARTDoubleBufTx_Write()` 会把数据拷贝到当前可用缓冲；DMA 忙时，另一块缓冲会作为待续发数据。
+`Vofa` 和 `LX824` 已迁移到 `STM32UARTFrameTx_*`，保留原来的 firewater 帧及舵机请求/应答协议：不补齐发送、不自动重复指令。
 
 ```c
-static uint8_t uart1_tx0[128];
-static uint8_t uart1_tx1[128];
-static STM32UARTDoubleBufTx_t uart1_tx;
+static uint8_t frame_pages[2][32];
+static STM32UARTFrameTx_t frame_tx;
 
-static void uart1_tx_done(void)
+err_t InitFrameTx(void)
 {
-    // 一帧发送完成后的通知
-}
-
-void app_uart1_tx_init(void)
-{
-    BSP_UART_RawData_t tx0 = {uart1_tx0, sizeof(uart1_tx0)};
-    BSP_UART_RawData_t tx1 = {uart1_tx1, sizeof(uart1_tx1)};
-
-    STM32UARTDoubleBufTx_Init(&uart1_tx, &huart1, tx0, tx1, uart1_tx_done);
-    STM32UARTDoubleBufTx_SetTxDMA(&uart1_tx);
+  err_t err = STM32UARTFrameTx_Init(&frame_tx, &huart6,
+      (BSP_UART_RawData_t){frame_pages[0], sizeof(frame_pages[0])},
+      (BSP_UART_RawData_t){frame_pages[1], sizeof(frame_pages[1])}, NULL);
+  return (err == OK) ? STM32UARTFrameTx_SetTxDMA(&frame_tx) : err;
 }
 ```
 
-注意点：
+调用 `STM32UARTFrameTx_Write(&frame_tx, data, actual_size)` 发送实际长度。返回 `OK` 表示帧已接受；一帧在发送且一帧已排队时返回 `BUSY`，新帧未入队，调用方可以稍后重试。BSP 内部保存/恢复 `PRIMASK`，模块无需再包裹 FreeRTOS 临界区。
 
-- 两块 TX 缓冲大小必须相同。
-- 单次写入长度不能超过单块缓冲容量。
-- 连续写太快时，pending 数据会被后一次写入覆盖。
+`HAL_UART_TxCpltCallback()` 在 UART TC 后释放当前页并启动排队帧。初次提交失败不会保留未接受的新帧；已接受的排队帧若续发失败，则保留并可用 `Flush()` 重试，后续 `Write()` 也会尝试推进旧帧并对新帧返回 `BUSY`。
 
-## 接口速查
+## 验证
 
-### 反查与基础处理
-
-| 函数                     | 作用                            | 跳转                                                  |
-| ------------------------ | ------------------------------- | ----------------------------------------------------- |
-| `BSP_UART_get_id`        | `USART_TypeDef *` 反查 BSP 编号 | [实现](./bsp_uart.c#L19) / [声明](./bsp_uart.h#L92)   |
-| `STM32UART_HandleRxData` | 把一段 RX 数据交给用户回调      | [实现](./bsp_uart.c#L228) / [声明](./bsp_uart.h#L116) |
-| `STM32UART_GetLastError` | 读取单缓冲 RX 最近错误码        | [实现](./bsp_uart.c#L215) / [声明](./bsp_uart.h#L112) |
-
-### 单缓冲环形 RX
-
-| 函数                      | 作用                        | 跳转                                                  |
-| ------------------------- | --------------------------- | ----------------------------------------------------- |
-| `STM32UART_Init`          | 绑定 RX 控制块              | [实现](./bsp_uart.c#L77) / [声明](./bsp_uart.h#L97)   |
-| `STM32UART_SetRxDMA`      | 启动 `ReceiveToIdle` RX DMA | [实现](./bsp_uart.c#L137) / [声明](./bsp_uart.h#L104) |
-| `STM32UART_SetRxCallback` | 更新 RX 回调                | [实现](./bsp_uart.c#L204) / [声明](./bsp_uart.h#L108) |
-
-### 双缓冲 TX
-
-| 函数                                         | 作用                     | 跳转                                                  |
-| -------------------------------------------- | ------------------------ | ----------------------------------------------------- |
-| `STM32UARTDoubleBufTx_Init`                  | 绑定双缓冲 TX 控制块     | [实现](./bsp_uart.c#L353) / [声明](./bsp_uart.h#L121) |
-| `STM32UARTDoubleBufTx_SetTxDMA`              | 配置 TX DMA              | [实现](./bsp_uart.c#L428) / [声明](./bsp_uart.h#L129) |
-| `STM32UARTDoubleBufTx_Write`                 | 写入待发送数据           | [实现](./bsp_uart.c#L475) / [声明](./bsp_uart.h#L133) |
-| `STM32UARTDoubleBufTx_Flush`                 | 提交 pending 数据到 DMA  | [实现](./bsp_uart.c#L522) / [声明](./bsp_uart.h#L139) |
-| `STM32UARTDoubleBufTx_SetTxCompleteCallback` | 更新 TX 完成回调         | [实现](./bsp_uart.c#L563) / [声明](./bsp_uart.h#L142) |
-| `STM32UARTDoubleBufTx_GetLastError`          | 读取双缓冲 TX 最近错误码 | [实现](./bsp_uart.c#L576) / [声明](./bsp_uart.h#L147) |
-| `STM32UARTDoubleBufTx_HandleTxComplete`      | 处理 TX DMA 完成事件     | [实现](./bsp_uart.c#L588) / [声明](./bsp_uart.h#L151) |
-
-### HAL 回调入口
-
-| 函数                         | 作用                | 跳转                      |
-| ---------------------------- | ------------------- | ------------------------- |
-| `HAL_UARTEx_RxEventCallback` | RX 空闲事件分发入口 | [实现](./bsp_uart.c#L613) |
-| `HAL_UART_TxCpltCallback`    | TX DMA 完成分发入口 | [实现](./bsp_uart.c#L636) |
-
-## 一句话记忆
-
-- RX 看 `ReceiveToIdle + 循环 DMA`。
-- TX 看 `双缓冲 + DMA_NORMAL`。
-- 真正给上层的，是切好的数据片段和发送完成回调。
+主机状态测试见 [tests/uart_tx](../../tests/uart_tx/README.md)。该测试覆盖接口与状态转换；真实 DMA 时序、回调期限和串口波形需要上板验证。
