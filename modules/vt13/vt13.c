@@ -8,36 +8,26 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "FreeRTOS.h"
-#include "task.h"
-
-#include "bsp_log.h"
-#include "bsp_uart.h"
 #include "crc_ref.h"
 
-static TaskHandle_t thread_alert;
-static bool inited = false;
+static uint8_t dma_buffer_[sizeof(vt13_data_t) * 2u];
+static uint8_t vt13_rx_buffer_[sizeof(vt13_data_t)];
+static volatile bool frame_ready_ = false;
+static vt13_t *instance_ = NULL;
 
-/**
- * @brief DMA接收完成回调，唤醒当前任务继续解析。
- */
-static void VT13_RxCpltCallback(void *arg) {
-  BaseType_t switch_required = pdFALSE;
-  RM_UNUSED(arg);
-
-  if (thread_alert == NULL) {
+static void VT13_RxCallback(uint8_t *data, size_t size) {
+  if ((size != sizeof(vt13_data_t)) || (instance_ == NULL))
     return;
+  memcpy(vt13_rx_buffer_, data, sizeof(vt13_data_t));
+  frame_ready_ = true;
+  if (instance_->thread_alert != NULL) {
+    BaseType_t woken = pdFALSE;
+    xTaskNotifyFromISR(instance_->thread_alert, SIGNAL_VT13_RAW_REDY, eSetBits,
+                       &woken);
+    portYIELD_FROM_ISR(woken);
   }
-
-  xTaskNotifyFromISR(thread_alert, SIGNAL_VT13_RAW_REDY, eSetValueWithOverwrite,
-                     &switch_required);
-  portYIELD_FROM_ISR(switch_required);
 }
 
-/**
- * @brief 将11位原始摇杆通道归一化到[-1, 1]。
- * 2 / 1320 = 1 / 660 ≈ 0.00151515  精度
- */
 static float VT13_NormalizeStick(uint16_t raw) {
   const float full_range = (float)(VT13_CH_VALUE_MAX - VT13_CH_VALUE_MIN);
   float out = 2.0f * ((float)raw - VT13_CH_VALUE_MID) / full_range;
@@ -46,8 +36,7 @@ static float VT13_NormalizeStick(uint16_t raw) {
 }
 
 /**
- * @brief 将11位滚轮通道归一化到[-0.5, 0.5]，与dr16第五通道保持一致量纲。
- */
+ * @brief �?1位滚轮通道归一化到[-0.5, 0.5]，与dr16第五通道保持一致量纲�? */
 static float VT13_NormalizeWheel(uint16_t raw) {
   const float full_range = (float)(VT13_CH_VALUE_MAX - VT13_CH_VALUE_MIN);
   float out = ((float)raw - VT13_CH_VALUE_MID) / full_range;
@@ -56,9 +45,8 @@ static float VT13_NormalizeWheel(uint16_t raw) {
 }
 
 /**
- * @brief 校验VT13原始数据CRC16。
- * @note 使用裁判系统CRC16实现，与VT13协议使用相同的CRC16多项式。
- */
+ * @brief 校验VT13原始数据CRC16�? * @note
+ * 使用裁判系统CRC16实现，与VT13协议使用相同的CRC16多项式�? */
 static bool VT13_VerifyCrc16CheckSum(const vt13_data_t *data) {
   ASSERT(data);
 
@@ -67,15 +55,14 @@ static bool VT13_VerifyCrc16CheckSum(const vt13_data_t *data) {
 }
 
 /**
- * @brief 检查VT13原始数据是否损坏。
- */
+ * @brief 检查VT13原始数据是否损坏�? */
 static bool VT13_DataCorrupted(const vt13_t *vt13) {
   ASSERT(vt13);
   if (vt13->data.sof_1 != 0xA9u)
     return true;
   if (vt13->data.sof_2 != 0x53u)
     return true;
-  /* 通道范围检查：11bit摇杆/滚轮均应位于有效区间。 */
+  /* 通道范围检查：11bit摇杆/滚轮均应位于有效区间�?*/
   if ((vt13->data.ch_0 < VT13_CH_VALUE_MIN) ||
       (vt13->data.ch_0 > VT13_CH_VALUE_MAX))
     return true;
@@ -96,11 +83,11 @@ static bool VT13_DataCorrupted(const vt13_t *vt13) {
       (vt13->data.wheel > VT13_CH_VALUE_MAX))
     return true;
 
-  /* 开关0保留为错误态，0.1.2才是有效位置。 */
+  /* 开�?保留为错误态，0.1.2才是有效位置�?*/
   if (vt13->data.mode_sw > vt13_CMD_SW_DOWN)
     return true;
 
-  /* 按键位虽然定义为2bit，但协议上只允许0/1。 */
+  /* 按键位虽然定义为2bit，但协议上只允许0/1�?*/
   if (vt13->data.mouse_left > 1u)
     return true;
   if (vt13->data.mouse_right > 1u)
@@ -108,7 +95,7 @@ static bool VT13_DataCorrupted(const vt13_t *vt13) {
   if (vt13->data.mouse_middle > 1u)
     return true;
 
-  /* 双帧头同时为0通常是DMA未更新或总线异常。 */
+  /* 双帧头同时为0通常是DMA未更新或总线异常�?*/
   if ((vt13->data.sof_1 == 0u) && (vt13->data.sof_2 == 0u))
     return true;
 
@@ -118,66 +105,63 @@ static bool VT13_DataCorrupted(const vt13_t *vt13) {
   return false;
 }
 
-err_t vt13_init(vt13_t *vt13) {
-  ASSERT(vt13);
-  RM_UNUSED(vt13);
-
-  if (inited) {
-    return ERR_INITED;
-  }
-  thread_alert = xTaskGetCurrentTaskHandle();
-  ASSERT(thread_alert != NULL);
-  if (thread_alert == NULL) {
-    return ERR_FAIL;
-  }
-
-  if (BSP_UART_RegisterCallback(BSP_UART_UI, BSP_UART_RX_CPLT_CB,
-                                VT13_RxCpltCallback, NULL) != BSP_OK) {
-    return ERR_FAIL;
-  }
-  inited = true;
-  LOGINFO("[vt13] init ok");
-  return RM_OK;
+err_t vt13_init(vt13_t *vt13, UART_HandleTypeDef *uart_handle) {
+  if (vt13 == NULL)
+    return PTR_NULL;
+  memset(vt13, 0, sizeof(*vt13));
+  vt13->thread_alert = xTaskGetCurrentTaskHandle();
+  vt13->init_error_ = STM32UART_Init(
+      &vt13->uart_, uart_handle,
+      (BSP_UART_RawData_t){dma_buffer_, sizeof(dma_buffer_)}, VT13_RxCallback);
+  instance_ = vt13;
+  return vt13->init_error_;
 }
 
-err_t vt13_restart(void) {
-  UART_HandleTypeDef *huart = BSP_UART_GetHandle(BSP_UART_UI);
-
-  ASSERT(huart != NULL);
-  if (huart == NULL) {
-    return ERR_NULL;
-  }
-
-  __HAL_UART_DISABLE(huart);
-  __HAL_UART_ENABLE(huart);
-  return RM_OK;
+err_t vt13_start(vt13_t *vt13) {
+  if (vt13 == NULL)
+    return PTR_NULL;
+  if (vt13->init_error_ != OK)
+    return vt13->init_error_;
+  return STM32UART_SetRxDMA(&vt13->uart_);
 }
 
-err_t vt13_start_dma_recv(vt13_t *vt13) {
-  UART_HandleTypeDef *huart = BSP_UART_GetHandle(BSP_UART_UI);
-
-  ASSERT(vt13);
-  ASSERT(huart != NULL);
-  if ((vt13 == NULL) || (huart == NULL)) {
-    return ERR_NULL;
+void vt13_update(vt13_t *vt13, uint32_t timeout_ms) {
+  if (vt13 == NULL)
+    return;
+  uint32_t notify = 0;
+  BaseType_t result = xTaskNotifyWait(SIGNAL_VT13_RAW_REDY, UINT32_MAX, &notify,
+                                      pdMS_TO_TICKS(timeout_ms));
+  if ((result == pdTRUE) && frame_ready_) {
+    frame_ready_ = false;
+    memcpy(&vt13->data, vt13_rx_buffer_, sizeof(vt13->data));
+    if (vt13_parse_rc(vt13, &vt13->cmd) == OK)
+      vt13->online_ = true;
+    else {
+      vt13->online_ = false;
+      memset(&vt13->cmd, 0, sizeof(vt13->cmd));
+    }
+  } else {
+    vt13->online_ = false;
+    memset(&vt13->cmd, 0, sizeof(vt13->cmd));
   }
-
-  if (HAL_UART_Receive_DMA(huart, (uint8_t *)&(vt13->data),
-                           sizeof(vt13->data)) == HAL_OK) {
-    return RM_OK;
-  }
-
-  return ERR_FAIL;
 }
+
+err_t vt13_restart(vt13_t *vt13) {
+  if ((vt13 == NULL) || (vt13->uart_.uart_handle_ == NULL))
+    return PTR_NULL;
+  __HAL_UART_DISABLE(vt13->uart_.uart_handle_);
+  __HAL_UART_ENABLE(vt13->uart_.uart_handle_);
+  return OK;
+}
+
+err_t vt13_start_dma_recv(vt13_t *vt13) { return vt13_start(vt13); }
 
 bool vt13_wait_dma_cplt(uint32_t timeout) {
-  uint32_t dummy = SIGNAL_VT13_RAW_REDY;
-  return xTaskNotifyWait(0, 0, &dummy, pdMS_TO_TICKS(timeout));
+  uint32_t notify = 0;
+  return xTaskNotifyWait(SIGNAL_VT13_RAW_REDY, 0, &notify,
+                         pdMS_TO_TICKS(timeout)) == pdTRUE;
 }
 
-/**
- * @brief 将VT13键盘位图拆分到解析结果中。
- */
 static void VT13_ParseKeyMask(uint16_t key_mask, vt13_cmd_rc_t *rc) {
   ASSERT(rc);
 
@@ -271,7 +255,7 @@ err_t vt13_parse_rc(const vt13_t *vt13, vt13_cmd_rc_t *rc) {
   ASSERT(rc);
 
   if (VT13_DataCorrupted(vt13)) {
-    return ERR_FAIL;
+    return FAILED;
   }
   memset(rc, 0, sizeof(*rc));
 
@@ -304,7 +288,7 @@ err_t vt13_parse_rc(const vt13_t *vt13, vt13_cmd_rc_t *rc) {
   rc->frame.sof_1 = vt13->data.sof_1;
   rc->frame.sof_2 = vt13->data.sof_2;
 
-  return RM_OK;
+  return OK;
 }
 
 err_t vt13_cmd_rc_to_cmd_rc(const vt13_cmd_rc_t *vt13_rc, cmd_rc_t *rc) {
@@ -314,37 +298,35 @@ err_t vt13_cmd_rc_to_cmd_rc(const vt13_cmd_rc_t *vt13_rc, cmd_rc_t *rc) {
   ASSERT(vt13_rc != NULL);
   ASSERT(rc != NULL);
   if ((vt13_rc == NULL) || (rc == NULL)) {
-    return ERR_NULL;
+    return PTR_NULL;
   }
 
   memset(rc, 0, sizeof(*rc));
   rc->res = VT13_BuildCompatRes(vt13_rc);
 
   /*
-   * pause 被定义为最高优先级安全动作。
+   * pause 被定义为最高优先级安全动作�?   *
    * 一旦按下，直接把兼容遥控视图压成“停止挡”，这样即使上层没有识别 VT13
-   * 的扩展位，也会进入安全态。
-   */
+   * 的扩展位，也会进入安全态�?   */
   if (vt13_rc->func.pause) {
     rc->sw_l = CMD_SW_UP;
     rc->sw_r = CMD_SW_UP;
-    return RM_OK;
+    return OK;
   }
 
   sw_l = VT13_ToCmdSwitch(vt13_rc->mode_sw);
   if (sw_l == CMD_SW_ERR) {
-    return ERR_FAIL;
+    return FAILED;
   }
 
   /*
-   * VT13 只有一个三挡模式拨杆，所以这里把独有功能位映射成右拨杆子模式：
-   * - 默认：UP
+   * VT13 只有一个三挡模式拨杆，所以这里把独有功能位映射成右拨杆子模式�?   * -
+   * 默认：UP
    * - fn_1：MID
-   * - fn_2 或 trigger：DOWN
+   * - fn_2 �?trigger：DOWN
    *
-   * 这样 joint 现有的 sw_l / sw_r 状态机就能直接复用，不需要把整个关节控制
-   * 逻辑重写一遍。
-   */
+   * 这样 joint 现有�?sw_l / sw_r 状态机就能直接复用，不需要把整个关节控制
+   * 逻辑重写一遍�?   */
   if (vt13_rc->func.fn_1) {
     sw_r = CMD_SW_MID;
   }
@@ -361,7 +343,7 @@ err_t vt13_cmd_rc_to_cmd_rc(const vt13_cmd_rc_t *vt13_rc, cmd_rc_t *rc) {
   rc->sw_r = sw_r;
   rc->mouse = vt13_rc->mouse;
   rc->key = VT13_BuildCompatKeyMask(vt13_rc);
-  return RM_OK;
+  return OK;
 }
 
 err_t vt13_handle_offline(const vt13_t *vt13, vt13_cmd_rc_t *rc) {
@@ -370,5 +352,5 @@ err_t vt13_handle_offline(const vt13_t *vt13, vt13_cmd_rc_t *rc) {
 
   RM_UNUSED(vt13);
   memset(rc, 0, sizeof(*rc));
-  return RM_OK;
+  return OK;
 }
