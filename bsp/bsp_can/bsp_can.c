@@ -41,6 +41,20 @@ BSP_CAN_t BSP_CAN_get_id(CAN_TypeDef *addr)
 }
 
 /**
+ * @brief 通过逻辑 CAN ID 获取已注册的 CAN 控制块
+ * @param id 逻辑 CAN ID（如 BSP_CAN1、BSP_CAN2）
+ * @return 已初始化的 STM32CAN_t 指针；未注册或 ID 非法返回 NULL
+ */
+STM32CAN_t *STM32CAN_GetInstance(BSP_CAN_t id)
+{
+  if ((id == BSP_CAN_ID_ERROR) || (id >= BSP_CAN_NUMBER))
+  {
+    return NULL;
+  }
+  return stm32_can_map[id];
+}
+
+/**
  * @brief 判断逻辑 CAN ID 是否合法
  * @param id BSP_CAN_get_id 或 Init 得到的 ID
  * @return true：可用于索引对象表；false：ERROR 或越界

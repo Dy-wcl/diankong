@@ -12,7 +12,7 @@
 I6X_t *i6x = NULL;
 
 //! I6x FreeRTOS 任务：初始化 USART1 接收，并周期性刷新在线状态和解析结果。
-void I6X_task(void *argument)
+void i6x_task(void *argument)
 {
   RM_UNUSED(argument);
 

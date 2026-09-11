@@ -1,81 +1,60 @@
+/**
+ * @file chassis_task.c
+ * @brief 底盘控制任务实现
+ */
 #include "chassis_task.h"
 
+#include "bsp_can.h"
+#include "can.h"
 #include "chassis_control.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
 
-#include "dr16.h"
-#include "main.h"
-
-extern DR16_t *dr16;
-
+/* 底盘任务状态（用于调试和错误监控） */
 volatile err_t chassis_status = PENDING;
 
+/* CAN2 实例（用于底盘电机通信） */
+extern STM32CAN_t can2_instance;
+
 /**
- * @brief 底盘任务
- * @details 在任务循环中完成快照读取、通用输入映射与控制周期调用。
+ * @brief 底盘控制任务入口函数
+ * @param argument FreeRTOS 任务参数（未使用）
  *
- * 左拨杆 sw_l 模式（仅影响 enable/yaw，平移仍跟左摇杆）：
- * - CMD_SW_UP：安全失能（enable=false）
- * - CMD_SW_MID：正常控制，yaw=0
- * - CMD_SW_DOWN：正常控制，yaw=CHASSIS_SWITCH_DOWN_YAW（归一化）
- * - 其它/非法：失能
+ * @details 任务执行流程：
+ *   1. 初始化底盘 CAN 总线与电机
+ *   2. 初始化电机速度环 PID 参数
+ *   3. 启动 CAN 通信
+ *   4. 周期性调用底盘控制函数（2ms 周期）
  */
-void chassis_task(void *argument)
-{
-  (void)argument;
+void start_chassis_task(void *argument) {
+  RM_UNUSED(argument);
 
-  for (;;)
-  {
-    cmd_rc_t command = {0};
-    bool remote_online = false;
+  /* 初始化底盘总线与电机实例 */
+  chassis_status = chassis_control_init();
+  if (chassis_status != OK) {
+    /* 初始化失败，任务挂起 */
+    vTaskSuspend(NULL);
+    return;
+  }
 
-    if (dr16 != NULL)
-    {
-      const err_t snapshot_result =
-          DR16_GetSnapshot(dr16, &command, &remote_online);
-      if (snapshot_result != OK)
-      {
-        remote_online = false;
-      }
-    }
+  /* 初始化底盘电机速度环 PID */
+  chassis_speed_pid_init();
 
-    /* 默认安全：仅 MID/DOWN 使能；yaw 仅在对应档位覆盖 */
-    bool enable = false;
-    float yaw = 0.0f;
-    if (remote_online)
-    {
-      switch (command.sw_l)
-      {
-        case CMD_SW_UP:
-          enable = false;
-          yaw = 0.0f;
-          break;
-        case CMD_SW_MID:
-          enable = true;
-          yaw = 0.0f;
-          break;
-        case CMD_SW_DOWN:
-          enable = true;
-          yaw = CHASSIS_SWITCH_DOWN_YAW;
-          break;
-        default:
-          enable = false;
-          yaw = 0.0f;
-          break;
-      }
-    }
+  /* 启动 CAN2（之后不能再注册新电机） */
+  err_t can_start_result = STM32CAN_Start(&can2_instance);
+  if (can_start_result != OK) {
+    chassis_status = can_start_result;
+    vTaskSuspend(NULL);
+    return;
+  }
 
-    const chassis_control_input_t input = {
-        .forward = -command.ch.l.y,
-        .lateral = -command.ch.l.x,
-        .yaw = yaw,
-        .enable = enable,
-        .source_online = remote_online,
-    };
-    chassis_status = chassis_control_step(&input, HAL_GetTick());
+  /* 主控制循环 */
+  while (1) {
+    /* 执行底盘模式控制（根据遥控器状态） */
+    Chassis_Mode();
 
+    /* 2ms 控制周期 */
     vTaskDelay(pdMS_TO_TICKS(2U));
   }
 }
