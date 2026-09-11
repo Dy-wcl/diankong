@@ -3,6 +3,9 @@
 
 #include "comp_cmd.h"
 #include "comp_utils.h"
+#include "bsp_uart.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 /*
   SIGNAL是用bit位置区分的，一个SIGNAL只能包含一个高bit位。
@@ -91,12 +94,19 @@ typedef struct __attribute__((packed)) {
   } frame; /* 原始帧头 */
 } vt13_cmd_rc_t;
 
-typedef struct __attribute__((packed)) {
+typedef struct {
   vt13_data_t data;
+  TaskHandle_t thread_alert;
+  vt13_cmd_rc_t cmd;
+  bool online_;
+  err_t init_error_;
+  STM32UART_t uart_;
 } vt13_t;
 
-err_t vt13_init(vt13_t *vt13);
-err_t vt13_restart(void);
+err_t vt13_init(vt13_t *vt13, UART_HandleTypeDef *uart_handle);
+err_t vt13_start(vt13_t *vt13);
+void vt13_update(vt13_t *vt13, uint32_t timeout_ms);
+err_t vt13_restart(vt13_t *vt13);
 err_t vt13_start_dma_recv(vt13_t *vt13);
 bool vt13_wait_dma_cplt(uint32_t timeout);
 err_t vt13_parse_rc(const vt13_t *vt13, vt13_cmd_rc_t *rc);

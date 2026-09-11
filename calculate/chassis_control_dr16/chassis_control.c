@@ -5,18 +5,20 @@
 #include "chassis_control.h"
 #include "bsp_can.h"
 #include "can.h"
+#include "chassis_dynamics.h"
 #include "dj_motor_ctrl.h"
+#include "dr16.h"
 #include "pid_location.h"
-#include "vt13.h"
+#include "process.h"
+#include <math.h>
 
-#define CONSTRAIN(x, min, max) ((x) < (min) ? (min) : ((x) > (max) ? (max) : (x)))
-
-extern vt13_cmd_rc_t vt13_cmd_rc;
+/* DR16 task owns the decoded command and updates it periodically. */
+extern DR16_t *dr16;
 extern uint8_t joint_enable_single;
 
 /* 底盘电机总线与实例 */
-static dj_motor_bus_t chassis_bus;
-static dj_motor_t chassis_motors[CHASSIS_MOTOR_COUNT];
+dj_motor_bus_t chassis_bus;
+dj_motor_t chassis_motors[CHASSIS_MOTOR_COUNT];
 
 /* 速度环 PID 实例 */
 static PIDInstance pid_speed[CHASSIS_MOTOR_COUNT];
@@ -24,6 +26,10 @@ static PIDInstance pid_speed[CHASSIS_MOTOR_COUNT];
 /* 底盘状态与目标速度 */
 static chassis_control_state_t chassis_control_state_;
 static float motor_target_speed[CHASSIS_MOTOR_COUNT];
+static float torque_ff_current[CHASSIS_MOTOR_COUNT];
+#define CHASSIS_GRAVITY_N 20.0f
+#define CHASSIS_TORQUE_TO_CURRENT 1000.0f
+#define CHASSIS_WHEEL_RADIUS_M 0.076f
 
 /**
  * @brief 初始化底盘 CAN 总线与四个 M3508 电机
@@ -109,6 +115,7 @@ static void chassis_motor_pid_control_speed(uint8_t motor_index,
       PIDCalculate(&pid_speed[motor_index], current_speed, target_speed);
 
   /* 限幅到 M3508 允许范围 */
+  motor_current += torque_ff_current[motor_index];
   motor_current = CONSTRAIN(motor_current, -16384.0f, 16384.0f);
 
   /* 发送命令（写齐后自动发送） */
@@ -125,9 +132,12 @@ static void chassis_stop(void) {
 }
 
 static void chassis_control(void) {
-  chassis_control_state_.command.vx = -vt13_cmd_rc.ch.l.x * 3000;
-  chassis_control_state_.command.vy = -vt13_cmd_rc.ch.l.y * 3000;
-  chassis_control_state_.command.wz = -vt13_cmd_rc.ch.r.x * 3000;
+  const cmd_rc_t *command = &dr16->dr16_cmd;
+
+  chassis_dynamics_feedforward(torque_ff_current);
+  chassis_control_state_.command.vx = -command->ch.l.x * 3000;
+  chassis_control_state_.command.vy = -command->ch.l.y * 3000;
+  chassis_control_state_.command.wz = -command->ch.r.x * 3000;
 
   // 麦克纳姆轮逆运动学：将底盘速度 (vx, vy, wz) 分解为 4 个电机目标转速。
   //                      +vy(前)
@@ -140,18 +150,9 @@ static void chassis_control(void) {
   //                         v
   //                      -vy(后)
   /* 麦克纳姆轮运动学解算 */
-  motor_target_speed[CHASSIS_MOTOR_FL] = -chassis_control_state_.command.vx +
-                                         chassis_control_state_.command.vy +
-                                         -chassis_control_state_.command.wz;
-  motor_target_speed[CHASSIS_MOTOR_FR] = chassis_control_state_.command.vx +
-                                         chassis_control_state_.command.vy -
-                                         chassis_control_state_.command.wz;
-  motor_target_speed[CHASSIS_MOTOR_RL] = chassis_control_state_.command.vx -
-                                         chassis_control_state_.command.vy +
-                                         -chassis_control_state_.command.wz;
-  motor_target_speed[CHASSIS_MOTOR_RR] = -chassis_control_state_.command.vx -
-                                         chassis_control_state_.command.vy -
-                                         chassis_control_state_.command.wz;
+  chassis_dynamics_inverse(
+      chassis_control_state_.command.vx, chassis_control_state_.command.vy,
+      chassis_control_state_.command.wz, motor_target_speed);
 
   /* 执行速度环 PID 控制（写齐后自动发送 CAN 帧） */
   for (uint8_t i = 0; i < CHASSIS_MOTOR_COUNT; i++) {
@@ -160,12 +161,20 @@ static void chassis_control(void) {
 }
 
 void Chassis_Mode(void) {
-  if (vt13_cmd_rc.mode_sw == vt13_CMD_SW_MID) {
+  /* A missing or offline receiver must leave the chassis stopped. */
+  if ((dr16 == NULL) || !dr16->online_) {
+    chassis_stop();
+    return;
+  }
+
+  if (dr16->dr16_cmd.sw_l == CMD_SW_MID) {
     if (joint_enable_single == 1) {
       chassis_control();
     }
-  } else if (vt13_cmd_rc.mode_sw == vt13_CMD_SW_UP ||
-             vt13_cmd_rc.mode_sw == vt13_CMD_SW_DOWN) {
+  } else if (dr16->dr16_cmd.sw_l == CMD_SW_UP ||
+             dr16->dr16_cmd.sw_l == CMD_SW_DOWN) {
+    chassis_stop();
+  } else {
     chassis_stop();
   }
 }
