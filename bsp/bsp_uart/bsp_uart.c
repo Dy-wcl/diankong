@@ -719,6 +719,10 @@ static void STM32_UART_DBM_Error(DMA_HandleTypeDef *hdma)
   __HAL_DMA_DISABLE_IT(hdma, DMA_IT_TC | DMA_IT_HT | DMA_IT_TE | DMA_IT_DME);
   __HAL_DMA_DISABLE_IT(hdma, DMA_IT_FE);
   __HAL_DMA_DISABLE(hdma);
+  // HAL 的 DMA 错误分支只在 TE 时复位状态；FE/DME 进入本回调时 State 仍为 BUSY 且持锁。
+  // 流已被上面停止，这里补齐复位，任务侧 SetTxDMA + Flush 的恢复路径才能走通。
+  hdma->State = HAL_DMA_STATE_READY;
+  __HAL_UNLOCK(hdma);
   self->uart_handle_->ErrorCode |= HAL_UART_ERROR_DMA;
   self->uart_handle_->TxXferCount = 0U;
   self->uart_handle_->gState = HAL_UART_STATE_READY;
@@ -1017,7 +1021,7 @@ void STM32UARTDoubleBufTx_HandleTxComplete(STM32UARTDoubleBufTx_t *self)
   self->active_buf_ = (ct == 0U) ? 0U : 1U;
   // CT=0 表示DMA切换到了M0，说明M1刚完成
   // CT=1 表示DMA切换到了M1，说明M0刚完成
-  BSP_UART_RawData_t completed = (ct == 0U) ? self->dma_buff_0_ : self->dma_buff_1_;
+  BSP_UART_RawData_t completed = (ct == 0U) ? self->dma_buff_1_ : self->dma_buff_0_;
   if (self->tx_callback_ != NULL)
   {
     self->tx_callback_((uint8_t *)completed.addr_, completed.size_);
@@ -1069,5 +1073,36 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
   if (tx != NULL)
   {
     STM32UARTFrameTx_HandleTxComplete(tx);
+  }
+}
+
+//! HAL UART 错误回调，回收被错误路径终止的变长帧 TX 发送状态。
+//! RX 侧错误同样会进入本回调；只有 TX DMA 已物理停止且 UART TC 中断未挂起时，
+//! 才能确认本次传输是被错误路径终止的，此时复位 tx_busy_，pending 数据由 Write/Flush 重试。
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+  if (huart == NULL)
+  {
+    return;
+  }
+
+  const BSP_UART_t id = BSP_UART_get_id(huart->Instance);
+  if (!BSP_UART_is_valid_id(id))
+  {
+    return;
+  }
+
+  STM32UARTFrameTx_t *tx = stm32_uart_frame_tx_map[id];
+  if ((tx == NULL) || !tx->tx_busy_ || (huart->hdmatx == NULL))
+  {
+    return;
+  }
+
+  // DMA TC 已搬完但 UART TC 未到的窗口里 EN 同样为 0，此时 TCIE 已挂起、
+  // 正常完成路径仍会触发 HandleTxComplete，不能在这里回收状态。
+  if (((huart->hdmatx->Instance->CR & DMA_SxCR_EN) == 0U) &&
+      ((huart->Instance->CR1 & USART_CR1_TCIE) == 0U))
+  {
+    tx->tx_busy_ = false;
   }
 }
