@@ -22,9 +22,9 @@
 #define JOINT_MOTOR6_ANGLE_LIMIT_MAX (0.66f)
 
 #define JOINT_FIXED_TARGET_SPEED 1.0f
-#define JOINT_CONSTRAIN_TARGET_BY_ID(target_ptr, motor_id) \
-  CONSTRAIN_PTR((target_ptr), joint_angle_limit_min[(motor_id)], \
-    joint_angle_limit_max[(motor_id)])
+#define JOINT_CONSTRAIN_TARGET_BY_ID(target_ptr, motor_id)                     \
+  CONSTRAIN_PTR((target_ptr), joint_angle_limit_min[(motor_id)],               \
+                joint_angle_limit_max[(motor_id)])
 
 typedef struct {
   uint16_t W;
@@ -49,7 +49,5 @@ void Joint_Mode(void);
 void joint_down_ctrl(void);
 void joint_up_ctrl(void);
 void joint_enable(void);
-void joint_mouse_ctrl(void);
-void one_return(void);
 
 #endif

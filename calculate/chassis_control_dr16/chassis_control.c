@@ -11,6 +11,7 @@
 #include "pid_location.h"
 #include "process.h"
 #include <math.h>
+#include <stdbool.h>
 
 /* DR16 task owns the decoded command and updates it periodically. */
 extern DR16_t *dr16;

@@ -13,3 +13,5 @@
 - Final review improved finite-frame startup failure semantics: a rejected Write no longer retains the new frame; queued retry preserves already accepted data.
 - Final host regression and scoped whitespace checks passed. Recompiled the final BSP with ARM GCC -Werror successfully; later changes were comments and regression coverage only.
 - Completed implementation and documentation. Full-firmware and physical UART timing validation limitations are recorded in task_plan.md and the test README.
+
+- 2026-09-12: Integrated IMU RS485 using bsp_uart circular DMA and DR16-style ISR snapshot/task notification flow; Debug ARM build passed.

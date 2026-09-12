@@ -82,3 +82,6 @@ err_t InitFrameTx(void)
 ## 验证
 
 主机状态测试见 [tests/uart_tx](../../tests/uart_tx/README.md)。该测试覆盖接口与状态转换；真实 DMA 时序、回调期限和串口波形需要上板验证。
+
+
+IMU RS485 follows the same RX contract: its callback accepts arbitrary DMA fragments, accumulates the four protocol packets into an 80-byte snapshot, and wakes the task only after a complete aggregate has been received. The protocol parser therefore remains in task context and does not perform floating-point decoding from the UART ISR.
