@@ -3,17 +3,16 @@
  * @brief 六台达妙关节电机控制实现
  */
 #include "joint_control.h"
-#include "dm_motor_drv.h"
-#include "comp_utils.h"
-#include "dr16.h"
-#include "cmsis_os2.h"
 #include "bsp_can.h"
 #include "can.h"
+#include "cmsis_os2.h"
+#include "comp_utils.h"
+#include "dm_motor_drv.h"
+#include "dr16.h"
 
 extern motor_t motor[num];
 /* DR16 task owns the decoded command and updates it periodically. */
 extern DR16_t *dr16;
-extern uint16_t TB6210_angle;
 
 /* CAN1 实例用于关节电机通信 */
 static STM32CAN_t *can1_instance = NULL;
@@ -43,12 +42,6 @@ static void joint_constrain_target(motor_num motor_id, float *target_angle) {
   JOINT_CONSTRAIN_TARGET_BY_ID(target_angle, motor_id);
 }
 
-void one_return(void) {
-  if ((dr16 != NULL) && dr16->online_ &&
-      ((dr16->dr16_cmd.key & (uint16_t)(1u << CMD_KEY_B)) != 0u))
-    pos[0] = 1.2f;
-}
-
 static void joint_init_can(void) {
   if (can1_instance == NULL) {
     BSP_CAN_t can_id = BSP_CAN_get_id(CAN1);
@@ -60,7 +53,8 @@ static void joint_init_can(void) {
 
 void joint_enable(void) {
   joint_init_can();
-  if (can1_instance == NULL) return;
+  if (can1_instance == NULL)
+    return;
 
   dm_motor_enable(can1_instance, &motor[0]);
   dm_motor_enable(can1_instance, &motor[1]);
@@ -77,22 +71,12 @@ void joint_enable(void) {
 static void joint_disable(void) {
   joint_enable_single = 1U;
   joint_send_phase = 0U;
-  if (can1_instance == NULL) return;
+  if (can1_instance == NULL)
+    return;
 
   for (uint8_t i = 0; i < num; i++) {
     dm_motor_disable(can1_instance, &motor[i]);
     osDelay(1);
-  }
-}
-
-void joint_mouse_ctrl(void) {
-  if (joint_mode_t.A == 3U) {
-    TB6210_angle += 20;
-    CONSTRAIN_PTR(&TB6210_angle, 0, 180);
-  }
-  if (joint_mode_t.D == 3U) {
-    TB6210_angle -= 20;
-    CONSTRAIN_PTR(&TB6210_angle, 0, 180);
   }
 }
 
@@ -104,7 +88,8 @@ void joint_up_ctrl(void) {
 }
 
 void joint_send_pos(void) {
-  if (can1_instance == NULL) return;
+  if (can1_instance == NULL)
+    return;
 
   switch (joint_send_phase) {
   case 0:
@@ -149,7 +134,6 @@ void Joint_Mode(void) {
     return;
   }
 
-  one_return();
   if (dr16->dr16_cmd.sw_l == CMD_SW_UP) {
     joint_mode = 0U;
     joint_disable();
@@ -160,7 +144,6 @@ void Joint_Mode(void) {
     joint_mode = 0U;
   }
 
-  joint_mouse_ctrl();
   if (dr16->dr16_cmd.sw_l == CMD_SW_DOWN) {
     joint_mode_change();
     if (joint_mode == 1U) {

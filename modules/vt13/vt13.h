@@ -2,16 +2,11 @@
 #define _vt13_h
 
 #include "comp_cmd.h"
+#include "comp_def.h"
 #include "comp_utils.h"
 #include "bsp_uart.h"
 #include "FreeRTOS.h"
 #include "task.h"
-
-/*
-  SIGNAL是用bit位置区分的，一个SIGNAL只能包含一个高bit位。
-  不同的SIGNAL不能有相同的高bit位。
-*/
-#define SIGNAL_VT13_RAW_REDY (1u << 6)
 
 /* VT13 11位通道原始值范围 */
 #define VT13_CH_VALUE_MIN (364u)

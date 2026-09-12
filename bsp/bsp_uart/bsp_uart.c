@@ -881,8 +881,8 @@ err_t STM32UARTDoubleBufTx_Write(STM32UARTDoubleBufTx_t *self,
   }
   else
   {
-    memmove(self->dma_buff_0_.addr_, data, size);
-    memcpy(self->dma_buff_1_.addr_, self->dma_buff_0_.addr_, size);
+    memcpy(self->dma_buff_0_.addr_, data, size);
+    memcpy(self->dma_buff_1_.addr_, data, size);
     err = STM32UARTDoubleBufTx_Flush(self);
   }
   self->last_error_ = err;
@@ -916,6 +916,8 @@ err_t STM32UARTDoubleBufTx_Flush(STM32UARTDoubleBufTx_t *self)
     CLEAR_BIT(huart->Instance->CR3, USART_CR3_DMAT);
     CLEAR_BIT(huart->hdmatx->Instance->CR, DMA_SxCR_CT);
     __DMB();
+    self->active_buf_ = 0U;
+    self->tx_busy_ = true;
     const HAL_StatusTypeDef status = HAL_DMAEx_MultiBufferStart_IT(
         huart->hdmatx, (uint32_t)(uintptr_t)self->dma_buff_0_.addr_,
         (uint32_t)(uintptr_t)&huart->Instance->DR,
@@ -926,8 +928,6 @@ err_t STM32UARTDoubleBufTx_Flush(STM32UARTDoubleBufTx_t *self)
       huart->TxXferSize = (uint16_t)self->dma_buff_0_.size_;
       huart->TxXferCount = huart->TxXferSize;
       huart->gState = HAL_UART_STATE_BUSY_TX;
-      self->active_buf_ = 0U;
-      self->tx_busy_ = true;
       __HAL_UART_CLEAR_FLAG(huart, UART_FLAG_TC);
       SET_BIT(huart->Instance->CR3, USART_CR3_DMAT);
     }
@@ -1013,8 +1013,11 @@ void STM32UARTDoubleBufTx_HandleTxComplete(STM32UARTDoubleBufTx_t *self)
     return;
   }
   const uint32_t ct = self->uart_handle_->hdmatx->Instance->CR & DMA_SxCR_CT;
+  __DMB();
   self->active_buf_ = (ct == 0U) ? 0U : 1U;
-  BSP_UART_RawData_t completed = (ct == 0U) ? self->dma_buff_1_ : self->dma_buff_0_;
+  // CT=0 表示DMA切换到了M0，说明M1刚完成
+  // CT=1 表示DMA切换到了M1，说明M0刚完成
+  BSP_UART_RawData_t completed = (ct == 0U) ? self->dma_buff_0_ : self->dma_buff_1_;
   if (self->tx_callback_ != NULL)
   {
     self->tx_callback_((uint8_t *)completed.addr_, completed.size_);
