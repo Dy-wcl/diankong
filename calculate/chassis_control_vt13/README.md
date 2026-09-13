@@ -110,10 +110,10 @@ void ChassisControlTask(void *argument) {
 
 | 电机位置 | 设备 ID | CAN 控制组 | 物理接口 |
 |---------|--------|-----------|---------|
-| 左前轮 (FL) | 1 | 0x200 | CAN2 |
-| 右前轮 (FR) | 2 | 0x200 | CAN2 |
-| 左后轮 (RL) | 3 | 0x200 | CAN2 |
-| 右后轮 (RR) | 4 | 0x200 | CAN2 |
+| 左前轮 (FL) | 4 | 0x200 | CAN2 |
+| 右前轮 (FR) | 3 | 0x200 | CAN2 |
+| 左后轮 (RL) | 2 | 0x200 | CAN2 |
+| 右后轮 (RR) | 1 | 0x200 | CAN2 |
 
 ### 电机方向配置
 
@@ -153,16 +153,21 @@ void chassis_speed_pid_init(void) {
 底盘使用标准的麦克纳姆轮运动学解算：
 
 ```
-motor_FL = -vx + vy - wz
-motor_FR =  vx + vy - wz
-motor_RL =  vx - vy - wz
-motor_RR = -vx - vy - wz
+motor_FL = -s·vx - s·vy + wz
+motor_FR =  s·vx - s·vy + wz
+motor_RL = -s·vx + s·vy + wz
+motor_RR =  s·vx + s·vy + wz
+
+其中 `s = √2/2`，输出顺序为 `[FL, FR, RL, RR] = [4, 3, 2, 1]`。
 ```
 
 其中：
 - `vx`：前后速度（遥控器左摇杆 Y 轴）
 - `vy`：左右速度（遥控器左摇杆 X 轴）
-- `wz`：旋转速度（遥控器右摇杆 X 轴）
+- `wz`：旋转速度（遥控器右摇杆 X 轴，正值为顺时针）
+
+VT13 正常模式：`vx = -l.y × 3000`、`vy = -l.x × 3000`、`wz = r.x × 3000`。
+VT13 上档或下档时底盘停止；当前 VT13 实现没有小陀螺分支。
 
 ## 依赖模块
 
@@ -220,9 +225,9 @@ static void chassis_control(void) {
 
 ```c
 static void chassis_control(void) {
-  chassis_control_state_.command.vx = -vt13_cmd_rc.ch.l.x * 3000;
-  chassis_control_state_.command.vy = -vt13_cmd_rc.ch.l.y * 3000;
-  chassis_control_state_.command.wz = -vt13_cmd_rc.ch.r.x * 3000;
+  chassis_control_state_.command.vx = -vt13_cmd_rc.ch.l.y * 3000;
+  chassis_control_state_.command.vy = -vt13_cmd_rc.ch.l.x * 3000;
+  chassis_control_state_.command.wz = vt13_cmd_rc.ch.r.x * 3000;
   
   /* 限制最大速度 */
   const float max_linear_speed = 5000.0f;

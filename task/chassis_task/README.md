@@ -189,7 +189,7 @@ void monitor_task(void *argument) {
 | 中档 (MID) | `joint_enable_single == 1` | 正常控制 |
 | 中档 (MID) | `joint_enable_single == 0` | 停止 |
 | 上档 (UP) | - | 停止 |
-| 下档 (DOWN) | - | 停止 |
+| 下档 (DOWN) | - | 停止（VT13；DR16 为小陀螺模式） |
 
 ### 控制输入
 

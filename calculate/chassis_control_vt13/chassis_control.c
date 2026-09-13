@@ -54,22 +54,27 @@ err_t chassis_control_init(void) {
     return result;
   }
 
-  /* 初始化四个 M3508 底盘电机（设备 ID 1-4，控制组 0x200）
+  /* 初始化四个 M3508 底盘电机（控制组 0x200）
+   * 实车电机编号与轮位的对应关系：
+   *   左前轮 FL = 4 号电机
+   *   右前轮 FR = 3 号电机
+   *   左后轮 RL = 2 号电机
+   *   右后轮 RR = 1 号电机
    * reversed 参数根据实际机械安装方向设置 */
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_FL], &chassis_bus,
-                         DJ_MOTOR_M3508, 1, false);
+                         DJ_MOTOR_M3508, 4, false); /* 左前轮 = 4 号 */
   if (result != OK) return result;
 
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_FR], &chassis_bus,
-                         DJ_MOTOR_M3508, 2, false);
+                         DJ_MOTOR_M3508, 3, false); /* 右前轮 = 3 号 */
   if (result != OK) return result;
 
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_RL], &chassis_bus,
-                         DJ_MOTOR_M3508, 3, false);
+                         DJ_MOTOR_M3508, 2, false); /* 左后轮 = 2 号 */
   if (result != OK) return result;
 
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_RR], &chassis_bus,
-                         DJ_MOTOR_M3508, 4, false);
+                         DJ_MOTOR_M3508, 1, false); /* 右后轮 = 1 号 */
   if (result != OK) return result;
 
   return OK;
@@ -129,20 +134,40 @@ static void chassis_stop(void) {
 
 static void chassis_control(void) {
   chassis_dynamics_feedforward(torque_ff_current);
-  chassis_control_state_.command.vx = -vt13_cmd_rc.ch.l.x * 3000;
-  chassis_control_state_.command.vy = -vt13_cmd_rc.ch.l.y * 3000;
-  chassis_control_state_.command.wz = -vt13_cmd_rc.ch.r.x * 3000;
+  /*
+   * 统一底盘坐标系：
+   *   +X：前
+   *   +Y：左
+   *   +Z：上
+  *   +wz：顺时针
+   *
+   * VT13 左摇杆：l.x / l.y
+   *   注意：这里保留当前遥控器通道的实际方向反号，
+   *   只把它统一映射到机器人底盘坐标系。
+   */
+  chassis_control_state_.command.vx = -vt13_cmd_rc.ch.l.y * 3000.0f;  // +X：前
+  chassis_control_state_.command.vy = -vt13_cmd_rc.ch.l.x * 3000.0f;  // +Y：左
+  chassis_control_state_.command.wz =
+      vt13_cmd_rc.ch.r.x * 3000.0f;  // +wz：顺时针
 
-  // 麦克纳姆轮逆运动学：将底盘速度 (vx, vy, wz) 分解为 4 个电机目标转速。
-  //                      +vy(前)
-  //                         ^
-  //          II 象限       |       I 象限
-  //       Motor1(左前)     |    Motor2(右前)
-  //  -vx(左) <--------------+--------------> +vx(右)
-  //       Motor3(左后)     |    Motor4(右后)
-  //         III 象限       |      IV 象限
-  //                         v
-  //                      -vy(后)
+  /*
+   * 麦克纳姆轮逆运动学：
+   *   底盘坐标系：
+   *       +X：前
+   *       +Y：左
+   *       +Z：上
+  *       +wz：顺时针
+   *
+   *             前（+X）
+   *                ↑
+   *        4号 FL     3号 FR
+   *        左前       右前
+   *
+   *        2号 RL     1号 RR
+   *        左后       右后
+   *
+   *   输出数组顺序固定为 [FL, FR, RL, RR] = [4, 3, 2, 1]。
+   */
   /* 麦克纳姆轮运动学解算 */
   chassis_dynamics_inverse(
       chassis_control_state_.command.vx, chassis_control_state_.command.vy,
