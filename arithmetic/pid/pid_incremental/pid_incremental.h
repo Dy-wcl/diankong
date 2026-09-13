@@ -9,10 +9,11 @@
 #define __PID_INCREMENTAL_H
 
 // #include "arm_math.h"
-#include "stdint.h"
-#include "stdlib.h"
 #include <math.h>
 #include <string.h>
+
+#include "stdint.h"
+#include "stdlib.h"
 
 #ifndef abs
 #define abs(x) ((x > 0) ? x : -x)
@@ -23,21 +24,21 @@
 //! 该枚举和位置式 PID 同名项较多，跨模块引用时注意使用 PID_Improvement_jie_e 类型。
 typedef enum {
   PID_IMPROVE_NONE = 0b00000000,
-  /* 0000 0000 */ // 无改进
+  /* 0000 0000 */  // 无改进
   PID_Integral_Limit = 0b00000001,
-  /* 0000 0001 */ // 积分限幅
+  /* 0000 0001 */  // 积分限幅
   PID_Derivative_On_Measurement = 0b00000010,
-  /* 0000 0010 */ // 微分先行
+  /* 0000 0010 */  // 微分先行
   PID_Trapezoid_Intergral = 0b00000100,
-  /* 0000 0100 */ // 梯形积分
+  /* 0000 0100 */  // 梯形积分
   PID_FeedForward = 0b00001000,
-  /* 0000 1000 */ // 前馈控制
+  /* 0000 1000 */  // 前馈控制
   PID_OutputFilter = 0b00010000,
-  /* 0001 0000 */ // 输出滤波
+  /* 0001 0000 */  // 输出滤波
   PID_ChangingIntegrationRate = 0b00100000,
-  /* 0010 0000 */ // 变速积分
+  /* 0010 0000 */  // 变速积分
   PID_DerivativeFilter = 0b01000000,
-  /* 0100 0000 */ // 微分项低通滤波
+  /* 0100 0000 */  // 微分项低通滤波
 } PID_Improvement_jie_e;
 
 //* ================= 增量式 PID 运行实例 =================
@@ -110,7 +111,7 @@ typedef struct {
  * @param deadzone       死区范围
  * @param improve_flags  优化功能使能标志位（按位或组合）
  */
-void PID_Init_Params_jie(PIDInstance_jie *pid, float kp, float ki, float kd,
+void PID_Init_Params_jie(PIDInstance_jie* pid, float kp, float ki, float kd,
                          float dt, float max_output, float max_integral,
                          float deadzone, PID_Improvement_jie_e improve_flags);
 
@@ -121,19 +122,19 @@ void PID_Init_Params_jie(PIDInstance_jie *pid, float kp, float ki, float kd,
  * @param actual 反馈值
  * @return float  PID计算输出
  */
-float PID_Calculate_jie(PIDInstance_jie *pid, float target, float actual);
+float PID_Calculate_jie(PIDInstance_jie* pid, float target, float actual);
 
 /**
  * @brief 获取输出增量
  * @param pid     PID实例指针
  * @return float  PID输出增量
  */
-float PID_Get_Increment_jie(PIDInstance_jie *pid);
+float PID_Get_Increment_jie(PIDInstance_jie* pid);
 
 /**
  * @brief PID复位，清零所有运行时状态
  * @param pid PID实例指针
  */
-void PID_Reset_jie(PIDInstance_jie *pid);
+void PID_Reset_jie(PIDInstance_jie* pid);
 
 #endif /* __JIE_H */

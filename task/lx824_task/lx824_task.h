@@ -13,7 +13,7 @@ extern "C" {
  * CubeMX 在 Core/Src/freertos.c 中生成了同名弱函数 lx824_task；本函数提供强定义，
  * 由系统创建的 lx824_task 线程调用，周期性读取总线上舵机的 ID。
  */
-void lx824_task(void *argument);
+void lx824_task(void* argument);
 
 /**
  * @brief 读取最近一次成功获取到的舵机 ID。

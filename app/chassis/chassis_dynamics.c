@@ -5,17 +5,18 @@
  */
 
 #include "chassis_dynamics.h"
+
 #include <math.h>
 
 /* ==================== 物理参数定义 ==================== */
-#define G 20.0f   // 车重，用于计算重力补偿力矩
-#define R 0.076f  // 麦克纳姆轮半径 (m)，轮子的有效半径
-#define K 1000.0f // 力矩转换系数，将力转换为电机输出的比例系数
+#define G 20.0f    // 车重，用于计算重力补偿力矩
+#define R 0.076f   // 麦克纳姆轮半径 (m)，轮子的有效半径
+#define K 1000.0f  // 力矩转换系数，将力转换为电机输出的比例系数
 
 /* ==================== 静态变量 - 姿态信息 ==================== */
-static float pitch_; // 当前俯仰角 (rad)，底盘相对水平面的前后倾斜角度
-static float roll_;  // 当前横滚角 (rad)，底盘相对水平面的左右倾斜角度
-static float mp_;    // 机械俯仰角偏移 (rad)，底盘机械结构的固有俯仰角偏置
+static float pitch_;  // 当前俯仰角 (rad)，底盘相对水平面的前后倾斜角度
+static float roll_;   // 当前横滚角 (rad)，底盘相对水平面的左右倾斜角度
+static float mp_;     // 机械俯仰角偏移 (rad)，底盘机械结构的固有俯仰角偏置
 
 /**
  * @brief 设置底盘姿态角度
@@ -31,11 +32,11 @@ static float mp_;    // 机械俯仰角偏移 (rad)，底盘机械结构的固�
  */
 void chassis_dynamics_set_attitude(float y, float p, float r, float my,
                                    float mp) {
-  (void)y;    // 偏航角在本模块中未使用
-  (void)my;   // 偏航角速度在本模块中未使用
-  pitch_ = p; // 保存俯仰角
-  roll_ = r;  // 保存横滚角
-  mp_ = mp;   // 保存机械俯仰角偏移
+  (void)y;     // 偏航角在本模块中未使用
+  (void)my;    // 偏航角速度在本模块中未使用
+  pitch_ = p;  // 保存俯仰角
+  roll_ = r;   // 保存横滚角
+  mp_ = mp;    // 保存机械俯仰角偏移
 }
 
 /**
@@ -64,13 +65,13 @@ void chassis_dynamics_set_attitude(float y, float p, float r, float my,
  *             o[3]: 左后轮 (轮4)
  */
 void chassis_dynamics_inverse(float vx, float vy, float wz, float o[4]) {
-  const float s = .70710678118f; // √2/2 = sin(45°) = cos(45°)
+  const float s = .70710678118f;  // √2/2 = sin(45°) = cos(45°)
 
   // 麦克纳姆轮运动学逆解矩阵
-  o[0] = (-s * vx - s * vy + wz); // 左前轮：向前减速、向左减速、逆时针旋转加速
-  o[1] = (s * vx - s * vy + wz);  // 右前轮：向前加速、向左减速、逆时针旋转加速
-  o[2] = (s * vx + s * vy + wz);  // 右后轮：向前加速、向左加速、逆时针旋转加速
-  o[3] = (-s * vx + s * vy + wz); // 左后轮：向前减速、向左加速、逆时针旋转加速
+  o[0] = (-s * vx - s * vy + wz);  // 左前轮：向前减速、向左减速、逆时针旋转加速
+  o[1] = (s * vx - s * vy + wz);   // 右前轮：向前加速、向左减速、逆时针旋转加速
+  o[2] = (s * vx + s * vy + wz);   // 右后轮：向前加速、向左加速、逆时针旋转加速
+  o[3] = (-s * vx + s * vy + wz);  // 左后轮：向前减速、向左加速、逆时针旋转加速
 }
 
 /**
@@ -95,14 +96,14 @@ void chassis_dynamics_inverse(float vx, float vy, float wz, float o[4]) {
  * @note 该补偿值应叠加到PID控制输出上，以提高响应速度和控制精度
  */
 void chassis_dynamics_feedforward(float o[4]) {
-  float p = pitch_ - mp_;           // 实际俯仰角 = 测量俯仰角 - 机械偏移角
-  float r = roll_;                  // 横滚角
-  float q = 1.41421356237f * R * K; // √2 * R * K，归一化系数
+  float p = pitch_ - mp_;            // 实际俯仰角 = 测量俯仰角 - 机械偏移角
+  float r = roll_;                   // 横滚角
+  float q = 1.41421356237f * R * K;  // √2 * R * K，归一化系数
 
   // 计算各轮的重力补偿力矩
   // 符号由轮子位置和重力方向决定
-  o[0] = (-G * sinf(r) - G * sinf(p)) * q; // 左前轮：横滚负向、俯仰负向
-  o[1] = (G * sinf(r) - G * sinf(p)) * q;  // 右前轮：横滚正向、俯仰负向
-  o[2] = (G * sinf(r) + G * sinf(p)) * q;  // 右后轮：横滚正向、俯仰正向
-  o[3] = (-G * sinf(r) + G * sinf(p)) * q; // 左后轮：横滚负向、俯仰正向
+  o[0] = (-G * sinf(r) - G * sinf(p)) * q;  // 左前轮：横滚负向、俯仰负向
+  o[1] = (G * sinf(r) - G * sinf(p)) * q;   // 右前轮：横滚正向、俯仰负向
+  o[2] = (G * sinf(r) + G * sinf(p)) * q;   // 右后轮：横滚正向、俯仰正向
+  o[3] = (-G * sinf(r) + G * sinf(p)) * q;  // 左后轮：横滚负向、俯仰正向
 }

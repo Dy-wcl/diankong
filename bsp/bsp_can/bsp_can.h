@@ -1,13 +1,13 @@
 #ifndef BSP_CAN_H
 #define BSP_CAN_H
 
-#include "can.h"
-#include "comp_cmd.h"
-#include "comp_utils.h"
-
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include "can.h"
+#include "comp_cmd.h"
+#include "comp_utils.h"
 
 // ==================== CAN 常量与类型描述 ====================
 
@@ -33,8 +33,7 @@
  * 用于索引对象表 stm32_can_map[]。
  * BSP_CAN_NUMBER 为合法 ID 数量；BSP_CAN_ID_ERROR 表示无效外设地址。
  */
-typedef enum
-{
+typedef enum {
 #ifdef CAN1
   BSP_CAN1,
 #endif
@@ -52,13 +51,12 @@ typedef enum
  * data_ 仅包含 DLC 有效字节，剩余字节已清零。
  * 回调内指针仅本次有效，延后处理须先拷贝到自有缓冲区。
  */
-typedef struct
-{
-  uint32_t id_;                      //!< 帧 ID：标准帧为 StdId，扩展帧为 ExtId
-  uint32_t ide_;                     //!< 标识符类型：CAN_ID_STD / CAN_ID_EXT
-  uint32_t rtr_;                     //!< 远程帧标志：CAN_RTR_DATA / CAN_RTR_REMOTE
-  uint32_t fifo_;                    //!< 来源 FIFO：CAN_RX_FIFO0 / CAN_RX_FIFO1
-  uint8_t size_;                     //!< 有效数据长度 DLC，范围 0..8
+typedef struct {
+  uint32_t id_;    //!< 帧 ID：标准帧为 StdId，扩展帧为 ExtId
+  uint32_t ide_;   //!< 标识符类型：CAN_ID_STD / CAN_ID_EXT
+  uint32_t rtr_;   //!< 远程帧标志：CAN_RTR_DATA / CAN_RTR_REMOTE
+  uint32_t fifo_;  //!< 来源 FIFO：CAN_RX_FIFO0 / CAN_RX_FIFO1
+  uint8_t size_;   //!< 有效数据长度 DLC，范围 0..8
   uint8_t data_[BSP_CAN_DATA_SIZE];  //!< 数据区；无效尾部字节已清零
 } BSP_CAN_Frame_t;
 
@@ -74,19 +72,18 @@ typedef struct STM32CAN STM32CAN_t;
  * @param context 订阅时传入的用户上下文，可为 NULL
  * @note 回调必须短且非阻塞；禁止在回调内做协议状态机、日志或长时间处理。
  */
-typedef void (*STM32CAN_RxCallback_t)(STM32CAN_t *self,
-                                      const BSP_CAN_Frame_t *frame,
-                                      void *context);
+typedef void (*STM32CAN_RxCallback_t)(STM32CAN_t* self,
+                                      const BSP_CAN_Frame_t* frame,
+                                      void* context);
 
 /**
  * @brief 单个 RX 订阅槽
  *
  * 保存回调函数与用户上下文；相同 callback+context 重复注册保持幂等。
  */
-typedef struct
-{
+typedef struct {
   STM32CAN_RxCallback_t callback_;  //!< 数据到达时的用户回调（不可为 NULL）
-  void *context_;                   //!< 用户上下文，生命周期须覆盖 CAN 运行期
+  void* context_;                   //!< 用户上下文，生命周期须覆盖 CAN 运行期
 } STM32CAN_RxSubscriber_t;
 
 /**
@@ -96,10 +93,9 @@ typedef struct
  * 发送不排队：邮箱满立即返回 BUSY，由上层在下一周期用最新数据重试。
  * 协议打包、帧 ID 路由归业务模块，本结构不承载电机协议。
  */
-struct STM32CAN
-{
-  BSP_CAN_t id_;  //!< 逻辑 CAN 编号，用于挂入对象表
-  CAN_HandleTypeDef *can_handle_;  //!< 对应 HAL CAN 句柄
+struct STM32CAN {
+  BSP_CAN_t id_;                   //!< 逻辑 CAN 编号，用于挂入对象表
+  CAN_HandleTypeDef* can_handle_;  //!< 对应 HAL CAN 句柄
   STM32CAN_RxSubscriber_t
       subscribers_[STM32CAN_RX_SUBSCRIBER_CAPACITY];  //!< 固定容量订阅表
   uint8_t subscriber_count_;  //!< 已注册订阅者数量 [0, CAPACITY]
@@ -118,14 +114,14 @@ extern "C" {
  * @param addr CAN 寄存器基址（如 CAN1 / CAN2）
  * @return 对应 BSP_CAN_t；未识别或 NULL 返回 BSP_CAN_ID_ERROR
  */
-BSP_CAN_t BSP_CAN_get_id(CAN_TypeDef *addr);
+BSP_CAN_t BSP_CAN_get_id(CAN_TypeDef* addr);
 
 /**
  * @brief 通过逻辑 CAN ID 获取已注册的 CAN 控制块
  * @param id 逻辑 CAN ID（如 BSP_CAN1、BSP_CAN2）
  * @return 已初始化的 STM32CAN_t 指针；未注册或 ID 非法返回 NULL
  */
-STM32CAN_t *STM32CAN_GetInstance(BSP_CAN_t id);
+STM32CAN_t* STM32CAN_GetInstance(BSP_CAN_t id);
 
 /**
  * @brief 绑定 CAN 控制块到指定 HAL 句柄
@@ -136,7 +132,7 @@ STM32CAN_t *STM32CAN_GetInstance(BSP_CAN_t id);
  * @param can_handle  HAL CAN 句柄，Instance 须为已启用的 CAN 外设
  * @return OK 成功；PTR_NULL / NOT_FOUND / BUSY 等失败码
  */
-err_t STM32CAN_Init(STM32CAN_t *self, CAN_HandleTypeDef *can_handle);
+err_t STM32CAN_Init(STM32CAN_t* self, CAN_HandleTypeDef* can_handle);
 
 /**
  * @brief 在启动前注册 RX 订阅者
@@ -148,9 +144,8 @@ err_t STM32CAN_Init(STM32CAN_t *self, CAN_HandleTypeDef *can_handle);
  * @param context  用户上下文，可为 NULL；生命周期须覆盖运行期
  * @return OK 成功；PTR_NULL / STATE_ERR（已 Start）/ FULL（槽位已满）
  */
-err_t STM32CAN_SubscribeRx(STM32CAN_t *self,
-                           STM32CAN_RxCallback_t callback,
-                           void *context);
+err_t STM32CAN_SubscribeRx(STM32CAN_t* self, STM32CAN_RxCallback_t callback,
+                           void* context);
 
 /**
  * @brief 启动 CAN 外设并开启 RX FIFO 中断通知
@@ -161,7 +156,7 @@ err_t STM32CAN_SubscribeRx(STM32CAN_t *self,
  * @param self CAN 控制块
  * @return OK 成功；PTR_NULL / INIT_ERR 等
  */
-err_t STM32CAN_Start(STM32CAN_t *self);
+err_t STM32CAN_Start(STM32CAN_t* self);
 
 /**
  * @brief 配置 HAL CAN 过滤器
@@ -172,8 +167,7 @@ err_t STM32CAN_Start(STM32CAN_t *self);
  * @param filter HAL 过滤器配置，不可为 NULL
  * @return OK 成功；PTR_NULL / FAILED
  */
-err_t STM32CAN_ConfigFilter(STM32CAN_t *self,
-                            const CAN_FilterTypeDef *filter);
+err_t STM32CAN_ConfigFilter(STM32CAN_t* self, const CAN_FilterTypeDef* filter);
 
 /**
  * @brief 通过控制块发送一帧标准数据帧
@@ -186,9 +180,7 @@ err_t STM32CAN_ConfigFilter(STM32CAN_t *self,
  * @param size   字节数，须在 1..BSP_CAN_DATA_SIZE
  * @return OK / BUSY / PTR_NULL / SIZE_ERR / OUT_OF_RANGE / FAILED 等
  */
-err_t STM32CAN_Send(STM32CAN_t *self,
-                    uint32_t std_id,
-                    const uint8_t *data,
+err_t STM32CAN_Send(STM32CAN_t* self, uint32_t std_id, const uint8_t* data,
                     size_t size);
 
 /**
@@ -202,10 +194,8 @@ err_t STM32CAN_Send(STM32CAN_t *self,
  * @param size       字节数
  * @return 见 STM32CAN_Send；未注册时 NOT_FOUND
  */
-err_t STM32CAN_SendByHandle(CAN_HandleTypeDef *can_handle,
-                            uint32_t std_id,
-                            const uint8_t *data,
-                            size_t size);
+err_t STM32CAN_SendByHandle(CAN_HandleTypeDef* can_handle, uint32_t std_id,
+                            const uint8_t* data, size_t size);
 
 /**
  * @brief 向全部订阅者广播一帧 RX 快照
@@ -215,15 +205,14 @@ err_t STM32CAN_SendByHandle(CAN_HandleTypeDef *can_handle,
  * @param self  CAN 控制块
  * @param frame 帧快照，不可为 NULL
  */
-void STM32CAN_HandleRxFrame(STM32CAN_t *self,
-                            const BSP_CAN_Frame_t *frame);
+void STM32CAN_HandleRxFrame(STM32CAN_t* self, const BSP_CAN_Frame_t* frame);
 
 /**
  * @brief 读取 CAN 控制块最近一次错误码
  * @param self CAN 控制块
  * @return last_error_；self 为 NULL 时返回 PTR_NULL
  */
-err_t STM32CAN_GetLastError(const STM32CAN_t *self);
+err_t STM32CAN_GetLastError(const STM32CAN_t* self);
 
 #ifdef __cplusplus
 }

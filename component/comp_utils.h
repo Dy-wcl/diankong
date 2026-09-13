@@ -11,36 +11,32 @@
 #include <stddef.h>
 #include <stdint.h>
 
-
-
-
 #ifndef M_2PI
 #define M_2PI 6.28318530717958647692f
 #endif
 
 /* MCU_DEBUG_BUILD 由 CMake Debug 配置注入，禁止在头文件里手工定义。 */
 
-
 /**
  * @brief 返回两个值中的最大值
  *
  */
-#define MAX(a, b)                                                              \
-  ({                                                                           \
-    __typeof__(a) _a = (a);                                                    \
-    __typeof__(b) _b = (b);                                                    \
-    _a > _b ? _a : _b;                                                         \
+#define MAX(a, b)           \
+  ({                        \
+    __typeof__(a) _a = (a); \
+    __typeof__(b) _b = (b); \
+    _a > _b ? _a : _b;      \
   })
 
 /**
  * @brief 返回两个值中的最小值
  *
  */
-#define MIN(a, b)                                                              \
-  ({                                                                           \
-    __typeof__(a) _a = (a);                                                    \
-    __typeof__(b) _b = (b);                                                    \
-    _a < _b ? _a : _b;                                                         \
+#define MIN(a, b)           \
+  ({                        \
+    __typeof__(a) _a = (a); \
+    __typeof__(b) _b = (b); \
+    _a < _b ? _a : _b;      \
   })
 
 #ifdef MCU_DEBUG_BUILD
@@ -49,11 +45,11 @@
  * @brief 如果表达式的值为假则运行处理函数
  *
  */
-#define ASSERT(expr)                                                           \
-  do {                                                                         \
-    if (!(expr)) {                                                             \
-      verify_failed(__FILE__, __LINE__);                                       \
-    }                                                                          \
+#define ASSERT(expr)                     \
+  do {                                   \
+    if (!(expr)) {                       \
+      verify_failed(__FILE__, __LINE__); \
+    }                                    \
   } while (0)
 #else
 
@@ -70,11 +66,11 @@
  * @brief 如果表达式的值为假则运行处理函数
  *
  */
-#define VERIFY(expr)                                                           \
-  do {                                                                         \
-    if (!(expr)) {                                                             \
-      verify_failed(__FILE__, __LINE__);                                       \
-    }                                                                          \
+#define VERIFY(expr)                     \
+  do {                                   \
+    if (!(expr)) {                       \
+      verify_failed(__FILE__, __LINE__); \
+    }                                    \
   } while (0)
 #else
 
@@ -98,10 +94,10 @@
  * @brief 获取结构体或者联合成员的容器
  *
  */
-#define CONTAINER_OF(ptr, type, member)                                        \
-  ({                                                                           \
-    const typeof(((type *)0)->member) *__mptr = (ptr);                         \
-    (type *)((char *)__mptr - offsetof(type, member));                         \
+#define CONTAINER_OF(ptr, type, member)               \
+  ({                                                  \
+    const typeof(((type*)0)->member)* __mptr = (ptr); \
+    (type*)((char*)__mptr - offsetof(type, member));  \
   })
 
 /**
@@ -138,7 +134,7 @@ float abs_clampf(float x, float limit);
  * @param lo 下限
  * @param hi 上限
  */
-void clampf(float *origin, float lo, float hi);
+void clampf(float* origin, float lo, float hi);
 
 /**
  * @brief 符号函数
@@ -168,16 +164,14 @@ float circle_error(float sp, float fb, float range);
  * @param delta 变化量
  * @param range 被操作的值变化范围，正数时起效
  */
-void circle_add(float *origin, float delta, float range);
+void circle_add(float* origin, float delta, float range);
 
 /**
  * @brief 循环值取反
  *
  * @param origin 被操作的值
  */
-void circle_reverse(float *origin);
-
-
+void circle_reverse(float* origin);
 
 /**
  * @brief 断言失败处理
@@ -185,9 +179,9 @@ void circle_reverse(float *origin);
  * @param file 文件名
  * @param line 行号
  */
-void verify_failed(const char *file, uint32_t line);
+void verify_failed(const char* file, uint32_t line);
 
 #ifdef __cplusplus
 }
 #endif
-#endif // COMP_UTILS_H
+#endif  // COMP_UTILS_H

@@ -3,9 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-
-typedef enum
-{
+typedef enum {
   PENDING = 1,        ///< 等待中 | Pending
   OK = 0,             ///< 操作成功 | Operation successful
   FAILED = -1,        ///< 操作失败 | Operation failed

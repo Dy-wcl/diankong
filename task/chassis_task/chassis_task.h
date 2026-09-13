@@ -17,6 +17,6 @@ extern volatile err_t chassis_status;
  * @brief 底盘任务入口函数
  * @param argument FreeRTOS 任务参数（未使用）
  */
-void chassis_task(void *argument);
+void chassis_task(void* argument);
 
 #endif /* CHASSIS_TASK_H */

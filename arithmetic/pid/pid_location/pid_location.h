@@ -28,15 +28,15 @@
 //? Improve 使用按位或组合，计算路径通过位与判断需要启用哪些修正环节。
 //! 修改枚举值会影响已有 PID_Init_Config_s 配置，新增功能时只能追加新 bit。
 typedef enum {
-  PID_IMPROVE_NONE = 0b00000000,                // 0000 0000
-  PID_Integral_Limit = 0b00000001,              // 0000 0001
-  PID_Derivative_On_Measurement = 0b00000010,   // 0000 0010
-  PID_Trapezoid_Intergral = 0b00000100,         // 0000 0100
-  PID_Proportional_On_Measurement = 0b00001000, // 0000 1000
-  PID_OutputFilter = 0b00010000,                // 0001 0000
-  PID_ChangingIntegrationRate = 0b00100000,     // 0010 0000
-  PID_DerivativeFilter = 0b01000000,            // 0100 0000
-  PID_ErrorHandle = 0b10000000,                 // 1000 0000
+  PID_IMPROVE_NONE = 0b00000000,                 // 0000 0000
+  PID_Integral_Limit = 0b00000001,               // 0000 0001
+  PID_Derivative_On_Measurement = 0b00000010,    // 0000 0010
+  PID_Trapezoid_Intergral = 0b00000100,          // 0000 0100
+  PID_Proportional_On_Measurement = 0b00001000,  // 0000 1000
+  PID_OutputFilter = 0b00010000,                 // 0001 0000
+  PID_ChangingIntegrationRate = 0b00100000,      // 0010 0000
+  PID_DerivativeFilter = 0b01000000,             // 0100 0000
+  PID_ErrorHandle = 0b10000000,                  // 1000 0000
 } PID_Improvement_e;
 
 //* ================= 位置式 PID 错误状态 =================
@@ -68,11 +68,11 @@ typedef struct {
 
   //? improve parameter: 只有 Improve 中对应 bit 置位时，这些参数才会参与计算。
   PID_Improvement_e Improve;
-  float IntegralLimit; // 积分限幅
-  float CoefA;         // 变速积分 For Changing Integral
-  float CoefB; // 变速积分 ITerm = Err*((A-abs(err)+B)/A)  when B<|err|<A+B
-  float Output_LPF_RC;     // 输出滤波器 RC = 1/omegac
-  float Derivative_LPF_RC; // 微分滤波器系数
+  float IntegralLimit;  // 积分限幅
+  float CoefA;          // 变速积分 For Changing Integral
+  float CoefB;  // 变速积分 ITerm = Err*((A-abs(err)+B)/A)  when B<|err|<A+B
+  float Output_LPF_RC;      // 输出滤波器 RC = 1/omegac
+  float Derivative_LPF_RC;  // 微分滤波器系数
 
   //-----------------------------------
   //? for calculating: 以下字段由 PIDCalculate()
@@ -102,21 +102,21 @@ typedef struct {
 
 //* ================= 位置式 PID 初始化配置 =================
 //? 配置结构只描述固定参数，不保存运行时误差、输出和滤波历史。
-typedef struct // config parameter
+typedef struct  // config parameter
 {
   //? basic parameter: 控制器基础三参数、输出限幅和死区。
   float Kp;
   float Ki;
   float Kd;
-  float MaxOut;   // 输出限幅
-  float DeadBand; // 死区
+  float MaxOut;    // 输出限幅
+  float DeadBand;  // 死区
 
   //? improve parameter: 与 Improve bit 对应的可选优化参数。
   PID_Improvement_e Improve;
-  float IntegralLimit; // 积分限幅
-  float CoefA;         // AB为变速积分参数,变速积分实际上就引入了积分分离
-  float CoefB;         // ITerm = Err*((A-abs(err)+B)/A)  when B<|err|<A+B
-  float Output_LPF_RC; // RC = 1/omegac
+  float IntegralLimit;  // 积分限幅
+  float CoefA;          // AB为变速积分参数,变速积分实际上就引入了积分分离
+  float CoefB;          // ITerm = Err*((A-abs(err)+B)/A)  when B<|err|<A+B
+  float Output_LPF_RC;  // RC = 1/omegac
   float Derivative_LPF_RC;
 } PID_Init_Config_s;
 
@@ -139,12 +139,12 @@ typedef struct // config parameter
 /**
  * @brief 使用显式参数初始化 PID 实例并清空运行状态
  */
-void PIDInit(PIDInstance *pid, float kp, float ki, float kd, float max_output,
+void PIDInit(PIDInstance* pid, float kp, float ki, float kd, float max_output,
              float max_integral, float deadzone,
              PID_Improvement_e improve_flags, float coef_a, float coef_b,
              float output_lpf_rc, float derivative_lpf_rc);
 
-PIDInstance *PIDRegister(float kp, float ki, float kd, float max_output,
+PIDInstance* PIDRegister(float kp, float ki, float kd, float max_output,
                          float max_integral, float deadzone,
                          PID_Improvement_e improve_flags, float coef_a,
                          float coef_b, float output_lpf_rc,
@@ -157,6 +157,6 @@ PIDInstance *PIDRegister(float kp, float ki, float kd, float max_output,
  * @param ref     设定值
  * @return float  PID计算输出
  */
-float PIDCalculate(PIDInstance *pid, float measure, float ref);
+float PIDCalculate(PIDInstance* pid, float measure, float ref);
 
 #endif

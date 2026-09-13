@@ -8,6 +8,7 @@
  */
 
 #include "pid_incremental.h"
+
 #include "bsp_dwt.h"
 #define USE_TIME
 //* ================= 增量式 PID 优化环节实现 =================
@@ -18,7 +19,7 @@
  * 使用梯形公式计算积分项，提高积分精度（在采样频率低时有效）（在系统很稳定，但最后一点点误差消除得非常慢时可以试试)
  * ΔI = Ki * (ek + ek-1) / 2 * dt
  */
-static void f_Trapezoid_Intergral_jie(PIDInstance_jie *pid) {
+static void f_Trapezoid_Intergral_jie(PIDInstance_jie* pid) {
   //? 用相邻两次误差的平均值计算积分增量，比矩形积分更平滑。
 #ifdef USE_TIME
   pid->Iout = pid->Ki * ((pid->Err + pid->Last_Err) * 0.5f) * pid->dt;
@@ -32,7 +33,7 @@ static void f_Trapezoid_Intergral_jie(PIDInstance_jie *pid) {
  * 误差小时积分作用强，误差大时减弱积分作用，防止积分饱和
  * 通过对积分增量乘以变系数实现（在误差小时积分作用强，误差大时减弱积分作用）（防止系统一启动就冲过头）
  */
-static void f_Changing_Integration_Rate_jie(PIDInstance_jie *pid) {
+static void f_Changing_Integration_Rate_jie(PIDInstance_jie* pid) {
   //! CoefA 必须大于 0，否则线性削弱区间会出现除零风险。
   float abs_err = fabsf(pid->Err);
 
@@ -57,7 +58,7 @@ static void f_Changing_Integration_Rate_jie(PIDInstance_jie *pid) {
  * @brief 积分限幅（增量式）
  * 防止积分项过大导致积分饱和
  */
-static void f_Integral_Limit_jie(PIDInstance_jie *pid) {
+static void f_Integral_Limit_jie(PIDInstance_jie* pid) {
   //! 积分限幅只限制本轮 Iout 增量，不会回退已经累加到 Output 的历史输出。
   if (pid->Iout > pid->IntegralLimit) {
     pid->Iout = pid->IntegralLimit;
@@ -71,7 +72,7 @@ static void f_Integral_Limit_jie(PIDInstance_jie *pid) {
  * 仅对测量值进行微分，避免设定值突变带来的冲击
  * ΔD = -Kd * (actual - last_actual) / dt
  */
-static void f_Derivative_On_actualment_jie(PIDInstance_jie *pid) {
+static void f_Derivative_On_actualment_jie(PIDInstance_jie* pid) {
   //? 微分先行用测量值变化计算 Dout，避免 target 阶跃导致微分冲击。
 #ifdef USE_TIME
   pid->Dout = pid->Kd * (pid->Last_actual - pid->actual) / pid->dt;
@@ -86,7 +87,7 @@ static void f_Derivative_On_actualment_jie(PIDInstance_jie *pid) {
  * Dout(k) = alpha * raw_dout + (1-alpha) * Dout(k-1)
  * alpha = dt / (RC + dt)
  */
-static void f_Derivative_Filter_jie(PIDInstance_jie *pid, float raw_dout) {
+static void f_Derivative_Filter_jie(PIDInstance_jie* pid, float raw_dout) {
   //! Derivative_LPF_RC 越大滤波越重，响应也越慢；调参时需结合噪声和相位滞后一起看。
   float rc = pid->Derivative_LPF_RC;
   float factor;
@@ -106,7 +107,7 @@ static void f_Derivative_Filter_jie(PIDInstance_jie *pid, float raw_dout) {
  * 使用一阶低通滤波器平滑输出，减少输出抖动
  * Output(k) = alpha * raw_output + (1-alpha) * Output(k-1)
  */
-static void f_Output_Filter_jie(PIDInstance_jie *pid, float raw_output) {
+static void f_Output_Filter_jie(PIDInstance_jie* pid, float raw_output) {
   //? 输出滤波作用在累加后的总输出上，适合抑制电机电流或舵机指令抖动。
   float rc = pid->Output_LPF_RC;
   float factor;
@@ -124,7 +125,7 @@ static void f_Output_Filter_jie(PIDInstance_jie *pid, float raw_output) {
  * @brief 输出限幅
  * 将PID输出限制在[-MaxOut, MaxOut]范围内
  */
-static void f_Output_Limit_jie(PIDInstance_jie *pid) {
+static void f_Output_Limit_jie(PIDInstance_jie* pid) {
   //! 输出限幅必须在滤波后执行，保证最终写给执行器的值不会越界。
   if (pid->Output > pid->MaxOut) {
     pid->Output = pid->MaxOut;
@@ -138,7 +139,7 @@ static void f_Output_Limit_jie(PIDInstance_jie *pid) {
  * 基于设定值变化率的前馈，提前响应目标变化
  * ΔFF = Kf * (target - last_target) / dt
  */
-static float f_FeedForward_jie(PIDInstance_jie *pid) {
+static float f_FeedForward_jie(PIDInstance_jie* pid) {
   //? 前馈只跟 target 变化率有关，适合目标快速变化时提前补偿控制输出。
   float delta_target = pid->target - pid->Last_target;
   float delta_ff;
@@ -173,12 +174,11 @@ static float f_FeedForward_jie(PIDInstance_jie *pid) {
  * @param deadzone       死区范围
  * @param improve_flags  优化功能使能标志位（按位或组合）
  */
-void PID_Init_Params_jie(PIDInstance_jie *pid, float kp, float ki, float kd,
+void PID_Init_Params_jie(PIDInstance_jie* pid, float kp, float ki, float kd,
                          float dt, float max_output, float max_integral,
                          float deadzone, PID_Improvement_jie_e improve_flags) {
   //! 该初始化接口只做参数写入和运行时清零，调用方负责保证 dt/max_output 等参数有效。
-  if (pid == NULL)
-    return;
+  if (pid == NULL) return;
 
   /* 清零结构体 */
   memset(pid, 0, sizeof(PIDInstance_jie));
@@ -219,7 +219,7 @@ void PID_Init_Params_jie(PIDInstance_jie *pid, float kp, float ki, float kd,
  * @param target     设定值
  * @return float 返回PID总输出（位置式输出）
  */
-float PID_Calculate_jie(PIDInstance_jie *pid, float target, float actual) {
+float PID_Calculate_jie(PIDInstance_jie* pid, float target, float actual) {
   //! 调用方必须保证 pid 非空；本函数保持高频控制路径的旧接口开销。
 #ifdef USE_TIME
   /* 获取两次pid计算的时间间隔,用于积分和微分 */
@@ -332,10 +332,9 @@ float PID_Calculate_jie(PIDInstance_jie *pid, float target, float actual) {
  * @param pid PID实例指针
  * @return float PID输出增量
  */
-float PID_Get_Increment_jie(PIDInstance_jie *pid) {
+float PID_Get_Increment_jie(PIDInstance_jie* pid) {
   //? 该接口适合调试或外层限幅观察，只读取最近一次 PID_Calculate_jie() 的增量。
-  if (pid == NULL)
-    return 0.0f;
+  if (pid == NULL) return 0.0f;
   return pid->Output_Inc;
 }
 
@@ -343,10 +342,9 @@ float PID_Get_Increment_jie(PIDInstance_jie *pid) {
  * @brief PID复位，清零所有运行时状态（保留配置参数）
  * @param pid PID实例指针
  */
-void PID_Reset_jie(PIDInstance_jie *pid) {
+void PID_Reset_jie(PIDInstance_jie* pid) {
   //! Reset 只清运行时状态，不恢复 Kp/Ki/Kd、限幅、滤波和 Improve 配置。
-  if (pid == NULL)
-    return;
+  if (pid == NULL) return;
 
   /* 清零运行时状态（保留配置参数） */
   pid->actual = 0.0f;

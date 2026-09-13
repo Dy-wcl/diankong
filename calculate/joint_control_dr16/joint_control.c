@@ -3,6 +3,7 @@
  * @brief 六台达妙关节电机控制实现
  */
 #include "joint_control.h"
+
 #include "bsp_can.h"
 #include "can.h"
 #include "cmsis_os2.h"
@@ -12,10 +13,10 @@
 
 extern motor_t motor[num];
 /* DR16 task owns the decoded command and updates it periodically. */
-extern DR16_t *dr16;
+extern DR16_t* dr16;
 
 /* CAN1 实例用于关节电机通信 */
-static STM32CAN_t *can1_instance = NULL;
+static STM32CAN_t* can1_instance = NULL;
 
 uint8_t joint_enable_single = 0U;
 uint8_t joint_mode = 0U;
@@ -36,7 +37,7 @@ static const float joint_angle_limit_max[num] = {
     JOINT_MOTOR5_ANGLE_LIMIT_MAX, JOINT_MOTOR6_ANGLE_LIMIT_MAX,
 };
 
-static void joint_constrain_target(motor_num motor_id, float *target_angle) {
+static void joint_constrain_target(motor_num motor_id, float* target_angle) {
   ASSERT(motor_id < num);
   ASSERT(target_angle != NULL);
   JOINT_CONSTRAIN_TARGET_BY_ID(target_angle, motor_id);
@@ -53,8 +54,7 @@ static void joint_init_can(void) {
 
 void joint_enable(void) {
   joint_init_can();
-  if (can1_instance == NULL)
-    return;
+  if (can1_instance == NULL) return;
 
   dm_motor_enable(can1_instance, &motor[0]);
   dm_motor_enable(can1_instance, &motor[1]);
@@ -71,8 +71,7 @@ void joint_enable(void) {
 static void joint_disable(void) {
   joint_enable_single = 1U;
   joint_send_phase = 0U;
-  if (can1_instance == NULL)
-    return;
+  if (can1_instance == NULL) return;
 
   for (uint8_t i = 0; i < num; i++) {
     dm_motor_disable(can1_instance, &motor[i]);
@@ -81,35 +80,34 @@ static void joint_disable(void) {
 }
 
 void joint_up_ctrl(void) {
-  const cmd_rc_t *command = &dr16->dr16_cmd;
+  const cmd_rc_t* command = &dr16->dr16_cmd;
   pos[3] += command->ch.l.x * 0.0005f;
   pos[4] -= command->ch.l.y * 0.0005f;
   pos[5] -= command->ch.r.x * 0.0005f;
 }
 
 void joint_send_pos(void) {
-  if (can1_instance == NULL)
-    return;
+  if (can1_instance == NULL) return;
 
   switch (joint_send_phase) {
-  case 0:
-    pos_ctrl(can1_instance, motor[Motor1].id, pos[0], 0.5f);
-    pos_ctrl(can1_instance, motor[Motor2].id, pos[1], 0.5f);
-    break;
-  case 1:
-    pos_ctrl(can1_instance, motor[Motor3].id, pos[2], 0.5f);
-    pos_ctrl(can1_instance, motor[Motor4].id, pos[3], 0.5f);
-    break;
-  default:
-    pos_ctrl(can1_instance, motor[Motor5].id, pos[4], 0.5f);
-    pos_ctrl(can1_instance, motor[Motor6].id, pos[5], 0.5f);
-    break;
+    case 0:
+      pos_ctrl(can1_instance, motor[Motor1].id, pos[0], 0.5f);
+      pos_ctrl(can1_instance, motor[Motor2].id, pos[1], 0.5f);
+      break;
+    case 1:
+      pos_ctrl(can1_instance, motor[Motor3].id, pos[2], 0.5f);
+      pos_ctrl(can1_instance, motor[Motor4].id, pos[3], 0.5f);
+      break;
+    default:
+      pos_ctrl(can1_instance, motor[Motor5].id, pos[4], 0.5f);
+      pos_ctrl(can1_instance, motor[Motor6].id, pos[5], 0.5f);
+      break;
   }
   joint_send_phase = (uint8_t)((joint_send_phase + 1U) % 3U);
 }
 
 void joint_down_ctrl(void) {
-  const cmd_rc_t *command = &dr16->dr16_cmd;
+  const cmd_rc_t* command = &dr16->dr16_cmd;
   pos[0] -= command->ch.l.x * 0.0005f;
   pos[1] -= command->ch.l.y * 0.0005f;
   pos[2] += command->ch.r.y * 0.0005f;

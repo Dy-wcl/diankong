@@ -3,8 +3,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-extern vt13_t *vt13;
-void vt13_task(void *argument);
+extern vt13_t* vt13;
+void vt13_task(void* argument);
 #ifdef __cplusplus
 }
 #endif

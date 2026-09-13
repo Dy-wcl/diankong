@@ -1,4 +1,5 @@
 #include "joint_task.h"
+
 #include "bsp_can.h"
 #include "cmsis_os2.h"
 #include "dm_motor_ctrl.h"
@@ -8,7 +9,7 @@
 
 extern motor_t motor[num];
 extern float pos[num];
-void joint_task(void *argument) {
+void joint_task(void* argument) {
   RM_UNUSED(argument);
 
   // 先初始化 DM 电机对象，补齐关节控制依赖的 ID、模式与力矩范围

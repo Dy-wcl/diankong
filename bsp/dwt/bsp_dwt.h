@@ -19,12 +19,12 @@ typedef struct {
 
 //! 计算一段代码的执行耗时，单位为秒。
 //! dt 由调用方提供，用于保存耗时；code 为待测代码块。
-#define TIME_ELAPSE(dt, code)                                                  \
-  do {                                                                         \
-    float tstart = DWT_GetTimeline_s();                                        \
-    code;                                                                      \
-    dt = DWT_GetTimeline_s() - tstart;                                         \
-    LOGINFO("[DWT] " #dt " = %f s\r\n", dt);                                   \
+#define TIME_ELAPSE(dt, code)                \
+  do {                                       \
+    float tstart = DWT_GetTimeline_s();      \
+    code;                                    \
+    dt = DWT_GetTimeline_s() - tstart;       \
+    LOGINFO("[DWT] " #dt " = %f s\r\n", dt); \
   } while (0)
 
 // ==================== DWT 公开接口 ====================
@@ -35,11 +35,11 @@ void DWT_Init(uint32_t CPU_Freq_mHz);
 
 //! 获取两次调用之间的时间间隔，单位为秒。
 //! cnt_last 保存上一次 CYCCNT 时间戳，函数返回前会更新该值。
-float DWT_GetDeltaT(uint32_t *cnt_last);
+float DWT_GetDeltaT(uint32_t* cnt_last);
 
 //! 获取两次调用之间的高精度时间间隔，单位为秒。
 //! cnt_last 保存上一次 CYCCNT 时间戳，函数返回前会更新该值。
-double DWT_GetDeltaT64(uint32_t *cnt_last);
+double DWT_GetDeltaT64(uint32_t* cnt_last);
 
 //! 获取初始化以来的时间轴，单位为秒。
 float DWT_GetTimeline_s(void);

@@ -3,7 +3,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-void imu_can_task(void *argument);
+void imu_can_task(void* argument);
 #ifdef __cplusplus
 }
 #endif

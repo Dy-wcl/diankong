@@ -13,12 +13,12 @@
 // #define KD_MAX 5.0f
 #include "dm_motor_def.h"
 #define GetAngleBetween360(a) ((a) - (360 * (int32_t)((a) / 360)))
-#define GetAngleBetween180(angle)                                              \
-  ((angle) > 180) ? ((angle) - 360)                                            \
+#define GetAngleBetween180(angle)   \
+  ((angle) > 180) ? ((angle) - 360) \
                   : (((angle) < -180) ? ((angle) + 360) : (angle))
 #define TWO_PI (2.0f * jie_MI)
-#define Limit_Radian(angle)                                                    \
-  ((angle) > jie_MI ? (angle) - TWO_PI                                         \
+#define Limit_Radian(angle)            \
+  ((angle) > jie_MI ? (angle) - TWO_PI \
                     : ((angle) < -jie_MI ? (angle) + TWO_PI : (angle)))
 #define YAW_ALIGN_ANGLE 0
 // 无符号整数转换函数

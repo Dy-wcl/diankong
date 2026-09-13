@@ -12,7 +12,7 @@ extern "C" {
  * CubeMX 在 Core/Src/freertos.c 中生成了同名弱函数 vofa_task；本函数提供强定义，
  * 由系统创建的 vofa 线程调用，用于启动 USART3 上的 VOFA 收发逻辑。
  */
-void vofa_task(void *argument);
+void vofa_task(void* argument);
 
 /**
  * @brief 读取 VOFA 接收到的 speed 参数。
@@ -23,7 +23,7 @@ void vofa_task(void *argument);
  * @param speed 输出参数地址，不能为 NULL。
  * @return true 表示 speed 已经至少收到过一次；false 表示参数为空或尚未收到。
  */
-bool VofaTask_GetSpeed(float *speed);
+bool VofaTask_GetSpeed(float* speed);
 
 /**
  * @brief 读取 VOFA 接收到的 angle 参数。
@@ -34,7 +34,7 @@ bool VofaTask_GetSpeed(float *speed);
  * @param angle 输出参数地址，不能为 NULL。
  * @return true 表示 angle 已经至少收到过一次；false 表示参数为空或尚未收到。
  */
-bool VofaTask_GetAngle(float *angle);
+bool VofaTask_GetAngle(float* angle);
 
 /**
  * @brief 按名称读取 VOFA 参数表中的参数。
@@ -46,7 +46,7 @@ bool VofaTask_GetAngle(float *angle);
  * @param value 输出参数地址，不能为 NULL。
  * @return true 表示参数存在且已经收到过；false 表示参数不存在、参数为空或尚未收到。
  */
-bool VofaTask_GetParameter(const char *name, float *value);
+bool VofaTask_GetParameter(const char* name, float* value);
 
 /**
  * @brief VOFA ASCII 命令接收扩展点。
@@ -58,7 +58,7 @@ bool VofaTask_GetParameter(const char *name, float *value);
  * @param name 命令名，生命周期仅在回调执行期间有效。
  * @param value 解析后的有限浮点值。
  */
-void VofaTask_OnCommand(const char *name, float value);
+void VofaTask_OnCommand(const char* name, float value);
 
 #ifdef __cplusplus
 }

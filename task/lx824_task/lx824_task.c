@@ -13,7 +13,7 @@
 #define LX824_TASK_POLL_INTERVAL_MS (100u)  //! 舵机 ID 轮询周期
 
 //! 全局 LX824 对象指针，供其他业务模块复用舵机总线接口。
-LX824_t *lx824 = NULL;
+LX824_t* lx824 = NULL;
 
 //! 调试观测变量：最近一次读到的舵机 ID 和错误码。
 volatile uint8_t debug_lx824_servo_id = 0U;
@@ -25,8 +25,7 @@ static uint8_t g_servo_id = 0U;
 static volatile bool g_servo_id_valid = false;
 
 //! LX824 FreeRTOS 任务：初始化 UART1 舵机总线，并周期性读取舵机 ID。
-void lx824_task(void *argument)
-{
+void lx824_task(void* argument) {
   RM_UNUSED(argument);
 
   // 舵机串行总线当前保持使用 UART1（huart2=DR16）

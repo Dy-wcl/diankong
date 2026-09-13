@@ -4,11 +4,10 @@
  */
 #include "chassis_task.h"
 
+#include "FreeRTOS.h"
 #include "bsp_can.h"
 #include "can.h"
 #include "chassis_control.h"
-
-#include "FreeRTOS.h"
 #include "task.h"
 
 /* 底盘任务状态（用于调试和错误监控） */
@@ -27,7 +26,7 @@ extern STM32CAN_t can2_instance;
  *   3. 启动 CAN 通信
  *   4. 周期性调用底盘控制函数（2ms 周期）
  */
-void chassis_task(void *argument) {
+void chassis_task(void* argument) {
   RM_UNUSED(argument);
 
   /* 初始化底盘总线与电机实例 */

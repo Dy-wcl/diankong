@@ -5,30 +5,30 @@
 #ifndef CALUCATE_CHASSIS_CONTROL_H
 #define CALUCATE_CHASSIS_CONTROL_H
 
-#include "main.h"
 #include "comp_cmd.h"
+#include "main.h"
 
 /** 底盘电机数量（麦克纳姆轮四轮） */
 #define CHASSIS_MOTOR_COUNT (4U)
 
 /** 底盘电机索引枚举 */
 typedef enum {
-    CHASSIS_MOTOR_FL = 0, /**< 左前轮 */
-    CHASSIS_MOTOR_FR = 1, /**< 右前轮 */
-    CHASSIS_MOTOR_RL = 2, /**< 左后轮 */
-    CHASSIS_MOTOR_RR = 3  /**< 右后轮 */
+  CHASSIS_MOTOR_FL = 0, /**< 左前轮 */
+  CHASSIS_MOTOR_FR = 1, /**< 右前轮 */
+  CHASSIS_MOTOR_RL = 2, /**< 左后轮 */
+  CHASSIS_MOTOR_RR = 3  /**< 右后轮 */
 } chassis_motor_index_e;
 
 typedef struct {
-    float vx;
-    float vy;
-    float wz;
+  float vx;
+  float vy;
+  float wz;
 } chassis_control_command_t;
 
 typedef struct {
-    chassis_control_command_t command;
-    float command_limit;
-    uint8_t enabled;
+  chassis_control_command_t command;
+  float command_limit;
+  uint8_t enabled;
 } chassis_control_state_t;
 
 /**

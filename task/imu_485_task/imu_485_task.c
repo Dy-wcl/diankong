@@ -6,10 +6,9 @@
 #include "task.h"
 #include "usart.h"
 
-IMU485_t *imu_485_device = NULL;
+IMU485_t* imu_485_device = NULL;
 
-void imu_485_task(void *argument)
-{
+void imu_485_task(void* argument) {
   RM_UNUSED(argument);
 
   static IMU485_t instance;

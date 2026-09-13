@@ -3,6 +3,10 @@
  * @brief 麦克纳姆轮底盘控制实现
  */
 #include "chassis_control.h"
+
+#include <math.h>
+#include <stdbool.h>
+
 #include "bsp_can.h"
 #include "can.h"
 #include "chassis_dynamics.h"
@@ -10,11 +14,9 @@
 #include "dr16.h"
 #include "pid_location.h"
 #include "process.h"
-#include <math.h>
-#include <stdbool.h>
 
 /* DR16 task owns the decoded command and updates it periodically. */
-extern DR16_t *dr16;
+extern DR16_t* dr16;
 extern uint8_t joint_enable_single;
 
 /* 底盘电机总线与实例 */
@@ -43,7 +45,7 @@ err_t chassis_control_init(void) {
     return NOT_FOUND;
   }
 
-  STM32CAN_t *can2 = STM32CAN_GetInstance(can_id);
+  STM32CAN_t* can2 = STM32CAN_GetInstance(can_id);
   if (can2 == NULL) {
     return PTR_NULL;
   }
@@ -58,28 +60,24 @@ err_t chassis_control_init(void) {
    * reversed 参数根据实际机械安装方向设置 */
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_FL], &chassis_bus,
                          DJ_MOTOR_M3508, 1, false);
-  if (result != OK)
-    return result;
+  if (result != OK) return result;
 
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_FR], &chassis_bus,
                          DJ_MOTOR_M3508, 2, false);
-  if (result != OK)
-    return result;
+  if (result != OK) return result;
 
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_RL], &chassis_bus,
                          DJ_MOTOR_M3508, 3, false);
-  if (result != OK)
-    return result;
+  if (result != OK) return result;
 
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_RR], &chassis_bus,
                          DJ_MOTOR_M3508, 4, false);
-  if (result != OK)
-    return result;
+  if (result != OK) return result;
 
   return OK;
 }
 
-static void chassis_speed_pid_init_single(PIDInstance *pid, float kp, float ki,
+static void chassis_speed_pid_init_single(PIDInstance* pid, float kp, float ki,
                                           float kd, float max_out) {
   PIDInit(pid, kp, ki, kd, max_out, 3000.0f, 0.0f,
           PID_Integral_Limit | PID_Derivative_On_Measurement |
@@ -100,8 +98,7 @@ void chassis_speed_pid_init(void) {
 
 static void chassis_motor_pid_control_speed(uint8_t motor_index,
                                             float target_speed) {
-  if (motor_index >= CHASSIS_MOTOR_COUNT)
-    return;
+  if (motor_index >= CHASSIS_MOTOR_COUNT) return;
 
   /* 获取电机反馈 */
   dj_motor_feedback_t feedback;
@@ -133,7 +130,7 @@ static void chassis_stop(void) {
 }
 
 static void chassis_control(void) {
-  const cmd_rc_t *command = &dr16->dr16_cmd;
+  const cmd_rc_t* command = &dr16->dr16_cmd;
 
   chassis_dynamics_feedforward(torque_ff_current);
   chassis_control_state_.command.vx = -command->ch.l.x * 3000;

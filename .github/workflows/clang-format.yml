@@ -1,0 +1,121 @@
+# clang-format 格式检查(参考 https://clang.llvm.org/docs/ClangFormat.html):
+# 用 --dry-run --Werror 把格式违规当作错误,不修改文件,只报告。
+#
+# 检查范围:本仓库自有代码目录。
+# Core/、Drivers/、Middlewares/ 为 STM32CubeMX / HAL 生成代码,modules/ 为 submodule,均不检查。
+name: clang-format
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.c'
+      - '**.h'
+      - '**.hpp'
+      - '.clang-format'
+      - '.github/workflows/clang-format.yml'
+  pull_request:
+    paths:
+      - '**.c'
+      - '**.h'
+      - '**.hpp'
+      - '.clang-format'
+      - '.github/workflows/clang-format.yml'
+  workflow_dispatch:
+
+# 最小权限:默认只读,写权限仅在 fix job 内单独提升。
+permissions:
+  contents: read
+
+# .clang-format 使用了 clang-format 22+ 的新选项,
+# CI 版本必须与本地一致(23.1.1),否则解析结果不同。
+env:
+  CLANG_FORMAT_VERSION: 23.1.1
+
+jobs:
+  check:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install clang-format
+        run: pip install clang-format==${{ env.CLANG_FORMAT_VERSION }}
+
+      - name: Check formatting
+        run: |
+          clang-format --version
+          # 以 NUL 分隔收集文件到数组,文件名含空格等字符也不会被错误拆分
+          FILES=()
+          while IFS= read -r -d '' f; do
+            if [[ $f =~ \.(c|h|cc|cpp|hpp)$ ]]; then FILES+=("$f"); fi
+          done < <(git ls-files -z app arithmetic bsp calculate component task tool)
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "没有需要检查的源文件"
+            exit 0
+          fi
+
+          if ! clang-format --style=file --dry-run --Werror "${FILES[@]}"; then
+            echo "::error::存在不符合 .clang-format 的文件,请在本地运行 scripts/format.sh 后提交"
+            # 逐个打印建议修复的差异,便于在 CI 日志中定位
+            for f in "${FILES[@]}"; do
+              if ! clang-format --style=file --dry-run --Werror "$f" >/dev/null 2>&1; then
+                echo "::error file=$f::格式检查未通过,建议修改如下"
+                clang-format --style=file "$f" | diff -u "$f" - | head -60 || true
+              fi
+            done
+            exit 1
+          fi
+          echo "所有源文件均符合 .clang-format"
+
+  # 手动触发时自动修复并提交:Actions 页面 -> Run workflow -> 选择分支。
+  # 注意:该 job 会直接 push 到所选分支,建议配合分支保护规则使用。
+  fix:
+    name: Auto format and commit
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install clang-format
+        run: pip install clang-format==${{ env.CLANG_FORMAT_VERSION }}
+
+      - name: Format
+        run: |
+          # 与 check job 相同:NUL 分隔 + 数组,避免文件名含空格时出错
+          FILES=()
+          while IFS= read -r -d '' f; do
+            if [[ $f =~ \.(c|h|cc|cpp|hpp)$ ]]; then FILES+=("$f"); fi
+          done < <(git ls-files -z app arithmetic bsp calculate component task tool)
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "没有需要格式化的源文件"
+            exit 0
+          fi
+          clang-format --style=file -i "${FILES[@]}"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # 先暂存再判断,新增的未跟踪文件也能被正确提交
+          git add -A
+          if git diff --cached --quiet; then
+            echo "所有文件已符合格式,无需提交"
+          else
+            git commit -m "style: clang-format 自动格式化"
+            git push
+          fi

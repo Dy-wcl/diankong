@@ -10,16 +10,16 @@
  */
 #include "pid_location.h"
 
-#include "bsp_dwt.h"
-
 #include <string.h>
+
+#include "bsp_dwt.h"
 
 //* ================= 位置式 PID 优化环节实现 =================
 //? 以下静态函数只修改 PIDInstance 的中间项，最终输出仍由 PIDCalculate()
 // 统一汇总。
 
-static void *zmalloc(size_t size) {
-  void *ptr = malloc(size);
+static void* zmalloc(size_t size) {
+  void* ptr = malloc(size);
   if (ptr == NULL) {
     return NULL;
   }
@@ -30,32 +30,31 @@ static void *zmalloc(size_t size) {
 
 //?
 // 梯形积分：用本轮误差和上轮误差的平均值替代矩形积分，降低低采样频率下的积分误差。
-static void f_Trapezoid_Intergral(PIDInstance *pid) {
+static void f_Trapezoid_Intergral(PIDInstance* pid) {
   // 计算梯形的面积,(上底+下底)*高/2
   pid->ITerm = pid->Ki * ((pid->Err + pid->Last_Err) / 2) * pid->dt;
 }
 
 //?
 // 变速积分：误差小时保持积分作用，误差变大时线性削弱积分，降低启动或大阶跃时的超调。
-static void f_Changing_Integration_Rate(PIDInstance *pid) {
+static void f_Changing_Integration_Rate(PIDInstance* pid) {
   if (pid->Err * pid->Iout > 0) {
     // 积分呈累积趋势
-    if (abs(pid->Err) <= pid->CoefB)
-      return; // Full integral
+    if (abs(pid->Err) <= pid->CoefB) return;  // Full integral
     if (abs(pid->Err) <= (pid->CoefA + pid->CoefB))
       pid->ITerm *= (pid->CoefA - abs(pid->Err) + pid->CoefB) / pid->CoefA;
-    else // 最大阈值,不使用积分
+    else  // 最大阈值,不使用积分
       pid->ITerm = 0;
   }
 }
 
 //! 积分限幅同时限制 ITerm 和 Iout，避免输出已经饱和时继续累积同向积分。
-static void f_Integral_Limit(PIDInstance *pid) {
+static void f_Integral_Limit(PIDInstance* pid) {
   static float temp_Output, temp_Iout;
   temp_Iout = pid->Iout + pid->ITerm;
   temp_Output = pid->Pout + pid->Iout + pid->Dout;
   if (abs(temp_Output) > pid->MaxOut && (pid->Err * pid->Iout > 0)) {
-    pid->ITerm = 0; // 当前积分项置零
+    pid->ITerm = 0;  // 当前积分项置零
   }
 
   if (temp_Iout > pid->IntegralLimit) {
@@ -69,26 +68,26 @@ static void f_Integral_Limit(PIDInstance *pid) {
 }
 
 //? 微分先行：只对反馈值求微分，避免 Ref 突变时微分项产生尖峰冲击。
-static void f_Derivative_On_Measurement(PIDInstance *pid) {
+static void f_Derivative_On_Measurement(PIDInstance* pid) {
   pid->Dout = pid->Kd * (pid->Last_Measure - pid->Measure) / pid->dt;
 }
 
 //? 微分滤波：一阶低通平滑 Dout，用 RC 参数在响应速度和噪声抑制之间折中。
-static void f_Derivative_Filter(PIDInstance *pid) {
+static void f_Derivative_Filter(PIDInstance* pid) {
   pid->Dout = pid->Dout * pid->dt / (pid->Derivative_LPF_RC + pid->dt) +
               pid->Last_Dout * pid->Derivative_LPF_RC /
                   (pid->Derivative_LPF_RC + pid->dt);
 }
 
 //? 输出滤波：对最终 Output 做一阶低通，适合抑制执行器指令抖动。
-static void f_Output_Filter(PIDInstance *pid) {
+static void f_Output_Filter(PIDInstance* pid) {
   pid->Output =
       pid->Output * pid->dt / (pid->Output_LPF_RC + pid->dt) +
       pid->Last_Output * pid->Output_LPF_RC / (pid->Output_LPF_RC + pid->dt);
 }
 
 //! 输出限幅是最后一道保护，所有优化环节计算完成后都必须经过这里。
-static void f_Output_Limit(PIDInstance *pid) {
+static void f_Output_Limit(PIDInstance* pid) {
   if (pid->Output > pid->MaxOut) {
     pid->Output = pid->MaxOut;
   }
@@ -100,7 +99,7 @@ static void f_Output_Limit(PIDInstance *pid) {
 //? 电机堵转检测：输出接近最大且反馈长期跟不上 Ref 时累计 ERRORCount。
 //! 该逻辑会在堵转后反向 Ref，开启 PID_ErrorHandle
 //! 前需要确认执行器允许反向解堵。
-static void f_PID_ErrorHandle(PIDInstance *pid) {
+static void f_PID_ErrorHandle(PIDInstance* pid) {
   /*Motor Blocked Handle*/
   if (fabsf(pid->Output) < pid->MaxOut * 0.001f || fabsf(pid->Ref) < 0.0001f)
     return;
@@ -123,7 +122,7 @@ static void f_PID_ErrorHandle(PIDInstance *pid) {
 
 //@brief 使用显式参数初始化 PID，设置参数并将运行状态置零
 
-void PIDInit(PIDInstance *pid, float kp, float ki, float kd, float max_output,
+void PIDInit(PIDInstance* pid, float kp, float ki, float kd, float max_output,
              float max_integral, float deadzone,
              PID_Improvement_e improve_flags, float coef_a, float coef_b,
              float output_lpf_rc, float derivative_lpf_rc) {
@@ -149,13 +148,13 @@ void PIDInit(PIDInstance *pid, float kp, float ki, float kd, float max_output,
  * @brief 使用显式参数注册并初始化 PID 实例
  * @return PIDInstance* PID实例指针
  */
-PIDInstance *PIDRegister(float kp, float ki, float kd, float max_output,
+PIDInstance* PIDRegister(float kp, float ki, float kd, float max_output,
                          float max_integral, float deadzone,
                          PID_Improvement_e improve_flags, float coef_a,
                          float coef_b, float output_lpf_rc,
                          float derivative_lpf_rc) {
-  PIDInstance *pid = NULL;
-  pid = (PIDInstance *)zmalloc(sizeof(PIDInstance));
+  PIDInstance* pid = NULL;
+  pid = (PIDInstance*)zmalloc(sizeof(PIDInstance));
   if (pid == NULL) {
     return NULL;
   }
@@ -170,11 +169,10 @@ PIDInstance *PIDRegister(float kp, float ki, float kd, float max_output,
  * @param[in]      期望值
  * @retval         返回空
  */
-float PIDCalculate(PIDInstance *pid, float measure, float ref) {
+float PIDCalculate(PIDInstance* pid, float measure, float ref) {
   //! 调用方必须保证 pid 非空；该接口位于高频控制路径，保持旧版本无空指针分支。
   //? 堵转检测先使用上一轮输出和测量值判断故障状态，再参与本轮 Ref 处理。
-  if (pid->Improve & PID_ErrorHandle)
-    f_PID_ErrorHandle(pid);
+  if (pid->Improve & PID_ErrorHandle) f_PID_ErrorHandle(pid);
 
   pid->dt = DWT_GetDeltaT(&pid->DWT_CNT);
 
@@ -184,7 +182,7 @@ float PIDCalculate(PIDInstance *pid, float measure, float ref) {
   pid->Err = pid->Ref - pid->Measure;
 
   //! 堵转故障会把 Ref 反向，适用于可反向释放的执行器，不适用于单向机构。
-  if (pid->ERRORHandler.ERRORType == PID_MOTOR_BLOCKED_ERROR) // 堵转
+  if (pid->ERRORHandler.ERRORType == PID_MOTOR_BLOCKED_ERROR)  // 堵转
     pid->Ref = -ref;
 
   //? 死区内跳过完整 PID
@@ -196,27 +194,23 @@ float PIDCalculate(PIDInstance *pid, float measure, float ref) {
     pid->Dout = pid->Kd * (pid->Err - pid->Last_Err) / pid->dt;
 
     //* 按 Improve bit 顺序叠加可选优化环节。
-    if (pid->Improve & PID_Trapezoid_Intergral)
-      f_Trapezoid_Intergral(pid);
+    if (pid->Improve & PID_Trapezoid_Intergral) f_Trapezoid_Intergral(pid);
     if (pid->Improve & PID_ChangingIntegrationRate)
       f_Changing_Integration_Rate(pid);
     if (pid->Improve & PID_Derivative_On_Measurement)
       f_Derivative_On_Measurement(pid);
-    if (pid->Improve & PID_DerivativeFilter)
-      f_Derivative_Filter(pid);
-    if (pid->Improve & PID_Integral_Limit)
-      f_Integral_Limit(pid);
+    if (pid->Improve & PID_DerivativeFilter) f_Derivative_Filter(pid);
+    if (pid->Improve & PID_Integral_Limit) f_Integral_Limit(pid);
 
-    pid->Iout += pid->ITerm;                         // 累加积分
-    pid->Output = pid->Pout + pid->Iout + pid->Dout; // 计算输出
+    pid->Iout += pid->ITerm;                          // 累加积分
+    pid->Output = pid->Pout + pid->Iout + pid->Dout;  // 计算输出
 
     // 输出滤波
-    if (pid->Improve & PID_OutputFilter)
-      f_Output_Filter(pid);
+    if (pid->Improve & PID_OutputFilter) f_Output_Filter(pid);
 
     // 输出限幅
     f_Output_Limit(pid);
-  } else // 进入死区, 则清空积分和输出
+  } else  // 进入死区, 则清空积分和输出
   {
     //! 进入死区会清空 ITerm 和
     //! Output，适合定位控制；若需保持力矩，需另行设计保持项。

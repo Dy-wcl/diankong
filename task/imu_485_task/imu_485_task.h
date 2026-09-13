@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-void imu_485_task(void *argument);
+void imu_485_task(void* argument);
 
 #ifdef __cplusplus
 }

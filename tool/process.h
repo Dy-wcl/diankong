@@ -37,62 +37,62 @@ extern "C" {
  * @brief 数值限制宏
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define CONSTRAIN(x, min, max)                                                 \
-  ({                                                                           \
-    __typeof__(x) _x = (x);                                                    \
-    __typeof__(min) _min = (min);                                              \
-    __typeof__(max) _max = (max);                                              \
-    _x < _min ? _min : (_x > _max ? _max : _x);                                \
+#define CONSTRAIN(x, min, max)                  \
+  ({                                            \
+    __typeof__(x) _x = (x);                     \
+    __typeof__(min) _min = (min);               \
+    __typeof__(max) _max = (max);               \
+    _x < _min ? _min : (_x > _max ? _max : _x); \
   })
 
 /**
  * @brief 数值限制宏（指针版，直接修改数值）
  */
-#define CONSTRAIN_PTR(ptr, min, max)                                           \
-  do {                                                                         \
-    __typeof__(*(ptr)) _val = *(ptr);                                          \
-    *(ptr) = _val < (min) ? (min) : (_val > (max) ? (max) : _val);             \
+#define CONSTRAIN_PTR(ptr, min, max)                               \
+  do {                                                             \
+    __typeof__(*(ptr)) _val = *(ptr);                              \
+    *(ptr) = _val < (min) ? (min) : (_val > (max) ? (max) : _val); \
   } while (0)
 
 /**
  * @brief 绝对值宏
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define ABS(x)                                                                 \
-  ({                                                                           \
-    __typeof__(x) _x = (x);                                                    \
-    _x < 0 ? -_x : _x;                                                         \
+#define ABS(x)              \
+  ({                        \
+    __typeof__(x) _x = (x); \
+    _x < 0 ? -_x : _x;      \
   })
 
 /**
  * @brief 绝对值宏（指针版）
  */
-#define ABS_PTR(ptr)                                                           \
-  do {                                                                         \
-    __typeof__(*(ptr)) _val = *(ptr);                                          \
-    *(ptr) = _val < 0 ? -_val : _val;                                          \
+#define ABS_PTR(ptr)                  \
+  do {                                \
+    __typeof__(*(ptr)) _val = *(ptr); \
+    *(ptr) = _val < 0 ? -_val : _val; \
   } while (0)
 
 /**
  * @brief 返回两个值中的最大值
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define MAX(a, b)                                                              \
-  ({                                                                           \
-    __typeof__(a) _a = (a);                                                    \
-    __typeof__(b) _b = (b);                                                    \
-    _a > _b ? _a : _b;                                                         \
+#define MAX(a, b)           \
+  ({                        \
+    __typeof__(a) _a = (a); \
+    __typeof__(b) _b = (b); \
+    _a > _b ? _a : _b;      \
   })
 
 /**
  * @brief 返回两个值中的最小值
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define MIN(a, b)                                                              \
-  ({                                                                           \
-    __typeof__(a) _a = (a);                                                    \
-    __typeof__(b) _b = (b);                                                    \
-    _a < _b ? _a : _b;                                                         \
+#define MIN(a, b)           \
+  ({                        \
+    __typeof__(a) _a = (a); \
+    __typeof__(b) _b = (b); \
+    _a < _b ? _a : _b;      \
   })
 
 /**
@@ -124,43 +124,43 @@ extern "C" {
  * @brief 死区宏，返回0如果绝对值小于阈值
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define DEADZONE(x, threshold)                                                 \
-  ({                                                                           \
-    __typeof__(x) _x = (x);                                                    \
-    __typeof__(threshold) _th = (threshold);                                   \
-    ABS(_x) < _th ? 0.0f : _x;                                                 \
+#define DEADZONE(x, threshold)               \
+  ({                                         \
+    __typeof__(x) _x = (x);                  \
+    __typeof__(threshold) _th = (threshold); \
+    ABS(_x) < _th ? 0.0f : _x;               \
   })
 
 /**
  * @brief 死区宏（指针版）
  */
-#define DEADZONE_PTR(ptr, threshold)                                           \
-  do {                                                                         \
-    __typeof__(*(ptr)) _val = *(ptr);                                          \
-    __typeof__(threshold) _th = (threshold);                                   \
-    *(ptr) = ABS(_val) < _th ? 0.0f : _val;                                    \
+#define DEADZONE_PTR(ptr, threshold)         \
+  do {                                       \
+    __typeof__(*(ptr)) _val = *(ptr);        \
+    __typeof__(threshold) _th = (threshold); \
+    *(ptr) = ABS(_val) < _th ? 0.0f : _val;  \
   } while (0)
 
 /**
  * @brief 符号函数，返回-1、0或1
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define SIGN(x)                                                                \
-  ({                                                                           \
-    __typeof__(x) _x = (x);                                                    \
-    _x > 0 ? 1 : (_x < 0 ? -1 : 0);                                            \
+#define SIGN(x)                     \
+  ({                                \
+    __typeof__(x) _x = (x);         \
+    _x > 0 ? 1 : (_x < 0 ? -1 : 0); \
   })
 
 /**
  * @brief 线性插值
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define LERP(a, b, t)                                                          \
-  ({                                                                           \
-    __typeof__(a) _a = (a);                                                    \
-    __typeof__(b) _b = (b);                                                    \
-    __typeof__(t) _t = (t);                                                    \
-    _a + (_b - _a) * _t;                                                       \
+#define LERP(a, b, t)       \
+  ({                        \
+    __typeof__(a) _a = (a); \
+    __typeof__(b) _b = (b); \
+    __typeof__(t) _t = (t); \
+    _a + (_b - _a) * _t;    \
   })
 
 /**
@@ -181,20 +181,20 @@ extern "C" {
  * @brief 四舍五入
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define ROUND(x)                                                               \
-  ({                                                                           \
-    __typeof__(x) _x = (x);                                                    \
-    (int)(_x + 0.5f);                                                          \
+#define ROUND(x)            \
+  ({                        \
+    __typeof__(x) _x = (x); \
+    (int)(_x + 0.5f);       \
   })
 
 /**
  * @brief 交换两个值（需temp变量）
  */
-#define SWAP(a, b, temp)                                                       \
-  do {                                                                         \
-    (temp) = (a);                                                              \
-    (a) = (b);                                                                 \
-    (b) = (temp);                                                              \
+#define SWAP(a, b, temp) \
+  do {                   \
+    (temp) = (a);        \
+    (a) = (b);           \
+    (b) = (temp);        \
   } while (0)
 
 // // 设置位
@@ -244,39 +244,39 @@ extern "C" {
 /**
  * @brief 映射并限制到目标范围
  */
-#define MAP_CLAMP(x, in_min, in_max, out_min, out_max)                         \
-  CONSTRAIN(MAP((x), (in_min), (in_max), (out_min), (out_max)), (out_min),     \
+#define MAP_CLAMP(x, in_min, in_max, out_min, out_max)                     \
+  CONSTRAIN(MAP((x), (in_min), (in_max), (out_min), (out_max)), (out_min), \
             (out_max))
 
 /**
  * @brief 度数平方
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define SQUARE(x)                                                              \
-  ({                                                                           \
-    __typeof__(x) _x = (x);                                                    \
-    _x *_x;                                                                    \
+#define SQUARE(x)           \
+  ({                        \
+    __typeof__(x) _x = (x); \
+    _x* _x;                 \
   })
 
 /**
  * @brief 度数立方
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define CUBE(x)                                                                \
-  ({                                                                           \
-    __typeof__(x) _x = (x);                                                    \
-    _x *_x *_x;                                                                \
+#define CUBE(x)             \
+  ({                        \
+    __typeof__(x) _x = (x); \
+    _x * _x * _x;           \
   })
 
 /**
  * @brief 检查符号是否相同
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define SAME_SIGN(a, b)                                                        \
-  ({                                                                           \
-    __typeof__(a) _a = (a);                                                    \
-    __typeof__(b) _b = (b);                                                    \
-    ((_a > 0 && _b > 0) || (_a < 0 && _b < 0) || (_a == 0 && _b == 0));        \
+#define SAME_SIGN(a, b)                                                 \
+  ({                                                                    \
+    __typeof__(a) _a = (a);                                             \
+    __typeof__(b) _b = (b);                                             \
+    ((_a > 0 && _b > 0) || (_a < 0 && _b < 0) || (_a == 0 && _b == 0)); \
   })
 
 /**
@@ -310,32 +310,30 @@ extern "C" {
 #define IS_POWER_OF_TWO(x) (((x) & ((x) - 1)) == 0 && (x) != 0)
 
 // 获取最近的2的幂
-#define NEAREST_POWER_OF_TWO(x)                                                \
+#define NEAREST_POWER_OF_TWO(x) \
   (1U << (32 - __builtin_clz(x) - (IS_POWER_OF_TWO(x) ? 1 : 0)))
 
 // 延时宏（单位：循环次数，仅供调试）
-#define DELAY_LOOPS(loops)                                                     \
-  do {                                                                         \
-    volatile uint32_t _i = (loops);                                            \
-    while (_i--)                                                               \
-      __NOP();                                                                 \
+#define DELAY_LOOPS(loops)          \
+  do {                              \
+    volatile uint32_t _i = (loops); \
+    while (_i--) __NOP();           \
   } while (0)
 
 // 压入栈（假设有指针和大小）
-#define PUSH_STACK(ptr, val, size, idx)                                        \
-  do {                                                                         \
-    if ((idx) < (size))                                                        \
-      (ptr)[(idx)++] = (val);                                                  \
+#define PUSH_STACK(ptr, val, size, idx)         \
+  do {                                          \
+    if ((idx) < (size)) (ptr)[(idx)++] = (val); \
   } while (0)
 
 // 弹出栈
 #define POP_STACK(ptr, size, idx) ((idx) > 0 ? (ptr)[--(idx)] : 0)
 
 // 获取结构体成员偏移量
-#define OFFSET_OF(type, member) ((size_t)&(((type *)0)->member))
+#define OFFSET_OF(type, member) ((size_t)&(((type*)0)->member))
 
 // // 获取包含某成员的结构体指针
-// #define CONTAINER_OF(ptr, type, member) 
+// #define CONTAINER_OF(ptr, type, member)
 //   ((type *)((char *)(ptr) - OFFSET_OF(type, member)))
 
 // 检查指针是否对齐
@@ -363,12 +361,12 @@ extern "C" {
  * @brief 判断是否在容忍范围内
  * 使用语句表达式避免参数被多次求值的问题
  */
-#define IS_CLOSE(a, b, tolerance)                                              \
-  ({                                                                           \
-    __typeof__(a) _a = (a);                                                    \
-    __typeof__(b) _b = (b);                                                    \
-    __typeof__(tolerance) _tol = (tolerance);                                  \
-    ABS(_a - _b) < _tol;                                                       \
+#define IS_CLOSE(a, b, tolerance)             \
+  ({                                          \
+    __typeof__(a) _a = (a);                   \
+    __typeof__(b) _b = (b);                   \
+    __typeof__(tolerance) _tol = (tolerance); \
+    ABS(_a - _b) < _tol;                      \
   })
 
 /**

@@ -17,8 +17,7 @@
 float data[3] = {0.0f, 0.0f, 0.0f};
 
 //! 模块内部回调桥接：让 Vofa 驱动保持通用，任务层决定命令如何影响业务数据。
-static void OnVofaCommand(const char *name, float value)
-{
+static void OnVofaCommand(const char* name, float value) {
   VofaTask_OnCommand(name, value);
 }
 
@@ -42,8 +41,7 @@ static void OnVofaCommand(const char *name, float value)
 
 //! 默认命令处理：把 speed/angle/mit 写入上行调试数组。
 //! 业务代码可提供强定义覆盖该弱函数，扩展更多命令。
-__attribute__((weak)) void VofaTask_OnCommand(const char *name, float value)
-{
+__attribute__((weak)) void VofaTask_OnCommand(const char* name, float value) {
   if (strcmp(name, "speed") == 0) {
     data[0] = value;
   } else if (strcmp(name, "angle") == 0) {
@@ -54,8 +52,7 @@ __attribute__((weak)) void VofaTask_OnCommand(const char *name, float value)
 }
 
 //! VOFA FreeRTOS 任务：初始化 USART6 收发，并周期性发送 firewater 数据帧。
-void vofa_task(void *argument)
-{
+void vofa_task(void* argument) {
   RM_UNUSED(argument);
 
   static Vofa_t vofa;  // 静态存储，保证任务整个生命周期内有效。
@@ -73,7 +70,8 @@ void vofa_task(void *argument)
   }
 
   for (;;) {
-    (void)Vofa_Send(&vofa, data, ARRAY_LEN(data));  // 上行发送给 VOFA+ firewater 波形显示。
+    (void)Vofa_Send(&vofa, data,
+                    ARRAY_LEN(data));  // 上行发送给 VOFA+ firewater 波形显示。
     Vofa_Update(&vofa, VOFA_TASK_UPDATE_TIMEOUT_MS);
   }
 }
