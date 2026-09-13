@@ -3,6 +3,10 @@
  * @brief 麦克纳姆轮底盘控制实现
  */
 #include "chassis_control.h"
+
+#include <math.h>
+#include <stdbool.h>
+
 #include "bsp_can.h"
 #include "can.h"
 #include "chassis_dynamics.h"
@@ -10,11 +14,9 @@
 #include "dr16.h"
 #include "pid_location.h"
 #include "process.h"
-#include <math.h>
-#include <stdbool.h>
 
 /* DR16 task owns the decoded command and updates it periodically. */
-extern DR16_t *dr16;
+extern DR16_t* dr16;
 extern uint8_t joint_enable_single;
 
 /* 底盘电机总线与实例 */
@@ -44,7 +46,7 @@ err_t chassis_control_init(void) {
     return NOT_FOUND;
   }
 
-  STM32CAN_t *can2 = STM32CAN_GetInstance(can_id);
+  STM32CAN_t* can2 = STM32CAN_GetInstance(can_id);
   if (can2 == NULL) {
     return PTR_NULL;
   }
@@ -64,28 +66,24 @@ err_t chassis_control_init(void) {
    * reversed 参数根据实际机械安装方向设置 */
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_FL], &chassis_bus,
                          DJ_MOTOR_M3508, 4, false); /* 左前轮 = 4 号 */
-  if (result != OK)
-    return result;
+  if (result != OK) return result;
 
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_FR], &chassis_bus,
                          DJ_MOTOR_M3508, 3, false); /* 右前轮 = 3 号 */
-  if (result != OK)
-    return result;
+  if (result != OK) return result;
 
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_RL], &chassis_bus,
                          DJ_MOTOR_M3508, 2, false); /* 左后轮 = 2 号 */
-  if (result != OK)
-    return result;
+  if (result != OK) return result;
 
   result = dj_motor_init(&chassis_motors[CHASSIS_MOTOR_RR], &chassis_bus,
                          DJ_MOTOR_M3508, 1, false); /* 右后轮 = 1 号 */
-  if (result != OK)
-    return result;
+  if (result != OK) return result;
 
   return OK;
 }
 
-static void chassis_speed_pid_init_single(PIDInstance *pid, float kp, float ki,
+static void chassis_speed_pid_init_single(PIDInstance* pid, float kp, float ki,
                                           float kd, float max_out) {
   PIDInit(pid, kp, ki, kd, max_out, 3000.0f, 0.0f,
           PID_Integral_Limit | PID_Derivative_On_Measurement |
@@ -106,8 +104,7 @@ void chassis_speed_pid_init(void) {
 
 static void chassis_motor_pid_control_speed(uint8_t motor_index,
                                             float target_speed) {
-  if (motor_index >= CHASSIS_MOTOR_COUNT)
-    return;
+  if (motor_index >= CHASSIS_MOTOR_COUNT) return;
 
   /* 获取电机反馈 */
   dj_motor_feedback_t feedback;
@@ -139,7 +136,7 @@ static void chassis_stop(void) {
 }
 
 static void chassis_control(void) {
-  const cmd_rc_t *command = &dr16->dr16_cmd;
+  const cmd_rc_t* command = &dr16->dr16_cmd;
 
   chassis_dynamics_feedforward(torque_ff_current);
   /*
@@ -200,7 +197,7 @@ static void chassis_control(void) {
  *   wz = 固定小陀螺速度
  */
 static void chassis_small_gyro_control(void) {
-  const cmd_rc_t *command = &dr16->dr16_cmd;
+  const cmd_rc_t* command = &dr16->dr16_cmd;
 
   chassis_dynamics_feedforward(torque_ff_current);
 
@@ -219,10 +216,8 @@ static void chassis_small_gyro_control(void) {
   chassis_control_state_.command.wz = CHASSIS_SMALL_GYRO_SPEED;
 
   chassis_dynamics_inverse(
-      chassis_control_state_.command.vx,
-      chassis_control_state_.command.vy,
-      chassis_control_state_.command.wz,
-      motor_target_speed);
+      chassis_control_state_.command.vx, chassis_control_state_.command.vy,
+      chassis_control_state_.command.wz, motor_target_speed);
 
   for (uint8_t i = 0; i < CHASSIS_MOTOR_COUNT; i++) {
     chassis_motor_pid_control_speed(i, motor_target_speed[i]);
