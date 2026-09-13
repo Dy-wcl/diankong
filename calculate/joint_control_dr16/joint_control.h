@@ -48,6 +48,8 @@ typedef struct {
 void Joint_Mode(void);
 void joint_down_ctrl(void);
 void joint_up_ctrl(void);
+void joint_send_pos(void);
+void joint_mode_change(void);
 void joint_enable(void);
 
 #endif
