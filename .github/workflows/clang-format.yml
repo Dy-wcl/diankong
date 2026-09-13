@@ -1,27 +1,21 @@
 # clang-format 格式检查(参考 https://clang.llvm.org/docs/ClangFormat.html):
 # 用 --dry-run --Werror 把格式违规当作错误,不修改文件,只报告。
 #
+# 触发:任何分支的每次 push、所有 Pull Request、手动触发 —— 保证每一次提交都被检查。
+#
 # 检查范围:本仓库自有代码目录。
 # Core/、Drivers/、Middlewares/ 为 STM32CubeMX / HAL 生成代码,modules/ 为 submodule,均不检查。
 name: clang-format
 
 on:
   push:
-    branches: [main]
-    paths:
-      - '**.c'
-      - '**.h'
-      - '**.hpp'
-      - '.clang-format'
-      - '.github/workflows/clang-format.yml'
   pull_request:
-    paths:
-      - '**.c'
-      - '**.h'
-      - '**.hpp'
-      - '.clang-format'
-      - '.github/workflows/clang-format.yml'
   workflow_dispatch:
+
+# 同一分支/PR 连续 push 时,取消尚未完成的旧运行,只检查最新提交
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 # 最小权限:默认只读,写权限仅在 fix job 内单独提升。
 permissions:
@@ -60,18 +54,78 @@ jobs:
             exit 0
           fi
 
-          if ! clang-format --style=file --dry-run --Werror "${FILES[@]}"; then
-            echo "::error::存在不符合 .clang-format 的文件,请在本地运行 scripts/format.sh 后提交"
-            # 逐个打印建议修复的差异,便于在 CI 日志中定位
-            for f in "${FILES[@]}"; do
-              if ! clang-format --style=file --dry-run --Werror "$f" >/dev/null 2>&1; then
-                echo "::error file=$f::格式检查未通过,建议修改如下"
-                clang-format --style=file "$f" | diff -u "$f" - | head -60 || true
-              fi
-            done
+          SUMMARY="$GITHUB_STEP_SUMMARY"
+          {
+            echo "# clang-format 检查结果"
+            echo
+            echo "检查范围:app arithmetic bsp calculate component task tool,共 ${#FILES[@]} 个源文件"
+            echo
+          } >> "$SUMMARY"
+
+          # 逐个文件检查。--dry-run --Werror 会为每一处违规输出一行
+          # "文件:行:列: error: code should be clang-formatted",据此给出精确位置
+          re='^(.+):([0-9]+):([0-9]+): error: code should be clang-formatted'
+          FAIL=()
+          for f in "${FILES[@]}"; do
+            out=$(clang-format --style=file --dry-run --Werror "$f" 2>&1) && continue
+            n=0
+            first_line=''
+            detail=''
+            while IFS= read -r v; do
+              [[ $v =~ $re ]] || continue
+              n=$((n + 1))
+              [ -n "$first_line" ] || first_line=${BASH_REMATCH[2]}
+              detail+="- 第 ${BASH_REMATCH[2]} 行第 ${BASH_REMATCH[3]} 列:代码不符合 .clang-format"$'\n'
+            done < <(grep -F ': error: code should be clang-formatted' <<<"$out")
+
+            FAIL+=("$f")
+
+            # 在第一处违规的行上发 annotation,PR 的文件 diff 中直接可见
+            if [ -n "$first_line" ]; then
+              echo "::error title=格式检查:$f,file=$f,line=$first_line::发现 ${n} 处格式问题,详情见运行页面底部的 Summary"
+            else
+              echo "::error title=格式检查:$f,file=$f::clang-format 检查失败,详见日志"
+            fi
+
+            # 日志按文件折叠展示:违规位置列表 + 建议修复的差异
+            echo "::group::[$f] ${n} 处格式问题"
+            printf '%s' "$detail"
+            clang-format --style=file "$f" | diff -u "$f" - | head -100 || true
+            echo "::endgroup::"
+
+            # 运行页面底部的 Summary:每个文件的违规位置与建议修复 diff
+            {
+              echo "## ❌ \`$f\`(共 ${n} 处)"
+              echo
+              printf '%s' "$detail"
+              echo
+              echo '<details><summary>建议修复的 diff(最多 100 行)</summary>'
+              echo
+              echo '```diff'
+              clang-format --style=file "$f" | diff -u "$f" - | head -100 || true
+              echo '```'
+              echo '</details>'
+              echo
+            } >> "$SUMMARY"
+          done
+
+          if [ "${#FAIL[@]}" -gt 0 ]; then
+            {
+              echo "## 如何修复"
+              echo
+              echo '在仓库根目录运行一键格式化脚本,确认 `git diff` 无误后重新提交:'
+              echo
+              echo '```bash'
+              echo 'bash scripts/format.sh                # Linux / macOS / Git Bash'
+              echo 'powershell -File scripts/format.ps1   # Windows PowerShell'
+              echo '```'
+            } >> "$SUMMARY"
+            echo "::error::以下 ${#FAIL[@]} 个文件不符合 .clang-format:${FAIL[*]}。请在本地运行 scripts/format.sh(Linux/macOS/Git Bash)或 scripts/format.ps1(Windows)后重新提交"
             exit 1
           fi
-          echo "所有源文件均符合 .clang-format"
+
+          echo "✅ 所有 ${#FILES[@]} 个源文件均符合 .clang-format"
+          echo "✅ 全部通过,共检查 ${#FILES[@]} 个源文件" >> "$SUMMARY"
 
   # 手动触发时自动修复并提交:Actions 页面 -> Run workflow -> 选择分支。
   # 注意:该 job 会直接 push 到所选分支,建议配合分支保护规则使用。
