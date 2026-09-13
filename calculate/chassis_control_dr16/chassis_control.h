@@ -45,6 +45,7 @@ void chassis_speed_pid_init(void);
 /**
  * @brief 底盘模式控制（周期调用）
  */
+/** 底盘模式控制（周期调用）。左下档进入 DR16 小陀螺模式。 */
 void Chassis_Mode(void);
 
 #endif /* CALUCATE_CHASSIS_CONTROL_H */

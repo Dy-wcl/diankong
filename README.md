@@ -3886,17 +3886,17 @@ void chassis_dynamics_inverse(float vx, float vy, float wz, float out[4]);
 
 - 第一个参数 `vx` —— 底盘 X 方向线速度（m/s），正方向前进
 - 第二个参数 `vy` —— 底盘 Y 方向线速度（m/s），正方向左移
-- 第三个参数 `wz` —— 绕 Z 轴角速度（rad/s），正方向逆时针
-- 第四个参数 `out[4]` —— 输出四轮目标角速度（rad/s）：`out[0]` 左前、`out[1]` 右前、`out[2]` 右后、`out[3]` 左后
+- 第三个参数 `wz` —— 绕 Z 轴角速度（rad/s），正方向顺时针
+- 第四个参数 `out[4]` —— 输出四轮目标角速度（rad/s）：`out[0]` 左前、`out[1]` 右前、`out[2]` 左后、`out[3]` 右后
 
 **轮系布局**（俯视，45° 麦轮，系数 s = √2/2）：
 
 ```text
     前                    o[0] = -s·vx - s·vy + wz   （左前）
-  1     2                 o[1] =  s·vx - s·vy + wz   （右前）
-    \ /                   o[2] =  s·vx + s·vy + wz   （右后）
-    / \                   o[3] = -s·vx + s·vy + wz   （左后）
-  4     3
+    4     3                 o[1] =  s·vx - s·vy + wz   （右前）
+        \ /                   o[2] = -s·vx + s·vy + wz   （左后）
+        / \                   o[3] =  s·vx + s·vy + wz   （右后）
+    2     1
     后
 ```
 
@@ -3960,7 +3960,7 @@ void  Chassis_Mode(void);           // 底盘模式控制（任务周期调用�
 
 1. `BSP_CAN_get_id(CAN2)` + `STM32CAN_GetInstance` 获取 CAN2 控制块
 2. `dj_motor_bus_init(&chassis_bus, can2)` 注册 RX 订阅（占 1 槽）
-3. `dj_motor_init` 注册 4 台 **M3508**（设备 ID 1–4 → 控制组 0x200，`reversed = false`）
+3. `dj_motor_init` 注册 4 台 **M3508**（FL/FR/RL/RR 对应设备 ID 4/3/2/1，控制组 0x200，`reversed = false`）
 
 #### `chassis_speed_pid_init` — 四轮速度环 PID 参数
 
@@ -3977,9 +3977,10 @@ void  Chassis_Mode(void);           // 底盘模式控制（任务周期调用�
 |------|------|
 | `dr16 == NULL` 或遥控器离线 | `chassis_stop()`（`dj_motor_zero_and_flush` 发零帧） |
 | 左拨杆 MID 且 `joint_enable_single == 1` | `chassis_control()`：摇杆映射为 `vx/vy/wz`（×3000）→ 麦轮逆解 → 四轮速度 PID → `dj_motor_set_command`（写齐自动发送 0x200） |
-| 左拨杆 UP / DOWN / 其他 | `chassis_stop()` 安全停机 |
+| 左拨杆 DOWN（DR16） | `chassis_small_gyro_control()`：固定 `wz = 1000`，左摇杆控制平移 |
+| 左拨杆 UP / 其他；VT13 的 DOWN | `chassis_stop()` 安全停机 |
 
-**速度指令映射**：`vx = -ch.l.x × 3000`，`vy = -ch.l.y × 3000`，`wz = -ch.r.x × 3000`。PID 输出叠加 `chassis_dynamics_feedforward` 重力前馈后限幅 ±16384。
+**速度指令映射**：`vx = -ch.l.y × 3000`，`vy = -ch.l.x × 3000`，`wz = ch.r.x × 3000`。PID 输出叠加 `chassis_dynamics_feedforward` 重力前馈后限幅 ±16384。DR16 下档小陀螺使用左摇杆比例 `5000`，固定 `wz = 1000`。
 
 > ⚠️ `joint_enable_single` 由机械臂侧置位，实现"底盘仅在与机械臂联动状态允许"的互锁。
 

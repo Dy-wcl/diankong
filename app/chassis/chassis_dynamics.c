@@ -5,18 +5,17 @@
  */
 
 #include "chassis_dynamics.h"
-
 #include <math.h>
 
 /* ==================== 物理参数定义 ==================== */
-#define G 20.0f    // 车重，用于计算重力补偿力矩
-#define R 0.076f   // 麦克纳姆轮半径 (m)，轮子的有效半径
-#define K 1000.0f  // 力矩转换系数，将力转换为电机输出的比例系数
+#define G 20.0f   // 车重，用于计算重力补偿力矩
+#define R 0.076f  // 麦克纳姆轮半径 (m)，轮子的有效半径
+#define K 1000.0f // 力矩转换系数，将力转换为电机输出的比例系数
 
 /* ==================== 静态变量 - 姿态信息 ==================== */
-static float pitch_;  // 当前俯仰角 (rad)，底盘相对水平面的前后倾斜角度
-static float roll_;   // 当前横滚角 (rad)，底盘相对水平面的左右倾斜角度
-static float mp_;     // 机械俯仰角偏移 (rad)，底盘机械结构的固有俯仰角偏置
+static float pitch_; // 当前俯仰角 (rad)，底盘相对水平面的前后倾斜角度
+static float roll_;  // 当前横滚角 (rad)，底盘相对水平面的左右倾斜角度
+static float mp_;    // 机械俯仰角偏移 (rad)，底盘机械结构的固有俯仰角偏置
 
 /**
  * @brief 设置底盘姿态角度
@@ -32,11 +31,11 @@ static float mp_;     // 机械俯仰角偏移 (rad)，底盘机械结构的固�
  */
 void chassis_dynamics_set_attitude(float y, float p, float r, float my,
                                    float mp) {
-  (void)y;     // 偏航角在本模块中未使用
-  (void)my;    // 偏航角速度在本模块中未使用
-  pitch_ = p;  // 保存俯仰角
-  roll_ = r;   // 保存横滚角
-  mp_ = mp;    // 保存机械俯仰角偏移
+  (void)y;    // 偏航角在本模块中未使用
+  (void)my;   // 偏航角速度在本模块中未使用
+  pitch_ = p; // 保存俯仰角
+  roll_ = r;  // 保存横滚角
+  mp_ = mp;   // 保存机械俯仰角偏移
 }
 
 /**
@@ -45,33 +44,47 @@ void chassis_dynamics_set_attitude(float y, float p, float r, float my,
  *
  * 麦克纳姆轮布局（俯视图）：
  *    前
- *  1     2
+ *  4     3
  *    \ /
  *    / \
- *  4     3
+ *  2     1
  *    后
  *
  * 转换矩阵基于45°麦克纳姆轮的运动学模型：
  * - 系数 s = √2/2 ≈ 0.707（45度角的正弦/余弦值）
  * - 每个轮子的速度由 vx、vy 和 wz 三个分量线性组合得到
  *
- * @param vx 底盘X方向线速度 (m/s)，正方向为前进
- * @param vy 底盘Y方向线速度 (m/s)，正方向为左移
- * @param wz 底盘绕Z轴角速度 (rad/s)，正方向为逆时针旋转
- * @param o[4] 输出数组，存储四个轮子的目标角速度 (rad/s)
- *             o[0]: 左前轮 (轮1)
- *             o[1]: 右前轮 (轮2)
- *             o[2]: 右后轮 (轮3)
- *             o[3]: 左后轮 (轮4)
+ * @param vx 底盘X方向线速度，正方向为前进（+X）
+ * @param vy 底盘Y方向线速度，正方向为左移（+Y）
+ * @param wz 底盘绕Z轴角速度，正方向为顺时针
+ * @param o[4] 输出数组，顺序固定为 [FL, FR, RL, RR]：
+ *             o[0]: 左前轮 FL —— 4 号电机
+ *             o[1]: 右前轮 FR —— 3 号电机
+ *             o[2]: 左后轮 RL —— 2 号电机
+ *             o[3]: 右后轮 RR —— 1 号电机
+ *
+ * 坐标系约定：
+ *             X：前，Y：左，Z：上
+ *             wz > 0：从上往下看顺时针旋转
  */
 void chassis_dynamics_inverse(float vx, float vy, float wz, float o[4]) {
-  const float s = .70710678118f;  // √2/2 = sin(45°) = cos(45°)
+  const float s = .70710678118f; // √2/2 = sin(45°) = cos(45°)
 
-  // 麦克纳姆轮运动学逆解矩阵
-  o[0] = (-s * vx - s * vy + wz);  // 左前轮：向前减速、向左减速、逆时针旋转加速
-  o[1] = (s * vx - s * vy + wz);   // 右前轮：向前加速、向左减速、逆时针旋转加速
-  o[2] = (s * vx + s * vy + wz);   // 右后轮：向前加速、向左加速、逆时针旋转加速
-  o[3] = (-s * vx + s * vy + wz);  // 左后轮：向前减速、向左加速、逆时针旋转加速
+  /*
+   * 底盘坐标系：
+   *   +X：前
+   *   +Y：左
+   *   +Z：上
+  *   +wz：顺时针
+   *
+   * 输出顺序固定为 [FL, FR, RL, RR] = [4, 3, 2, 1]。
+   * 注意：这里是“运动学正方向”，不等同于电机机械正转方向。
+   * 电机正反转由 chassis_control.c 中的 reversed 参数统一处理。
+   */
+  o[0] = -s * vx - s * vy + wz;  // FL：4号
+  o[1] =  s * vx - s * vy + wz;  // FR：3号
+  o[2] = -s * vx + s * vy + wz;  // RL：2号
+  o[3] =  s * vx + s * vy + wz;  // RR：1号
 }
 
 /**
@@ -87,23 +100,23 @@ void chassis_dynamics_inverse(float vx, float vy, float wz, float o[4]) {
  * - q = √2 * R * K：单位重力加速度对应的轮子力矩
  * - 每个轮子的补偿力矩取决于横滚角和俯仰角的组合影响
  *
- * @param o[4] 输出数组，存储四个轮子的前馈补偿力矩
- *             o[0]: 左前轮补偿力矩
- *             o[1]: 右前轮补偿力矩
- *             o[2]: 右后轮补偿力矩
- *             o[3]: 左后轮补偿力矩
+ * @param o[4] 输出数组，顺序固定为 [FL, FR, RL, RR]：
+ *             o[0]: 左前轮（4号）
+ *             o[1]: 右前轮（3号）
+ *             o[2]: 左后轮（2号）
+ *             o[3]: 右后轮（1号）
  *
  * @note 该补偿值应叠加到PID控制输出上，以提高响应速度和控制精度
  */
 void chassis_dynamics_feedforward(float o[4]) {
-  float p = pitch_ - mp_;            // 实际俯仰角 = 测量俯仰角 - 机械偏移角
-  float r = roll_;                   // 横滚角
-  float q = 1.41421356237f * R * K;  // √2 * R * K，归一化系数
+  float p = pitch_ - mp_;           // 实际俯仰角 = 测量俯仰角 - 机械偏移角
+  float r = roll_;                  // 横滚角
+  float q = 1.41421356237f * R * K; // √2 * R * K，归一化系数
 
   // 计算各轮的重力补偿力矩
   // 符号由轮子位置和重力方向决定
-  o[0] = (-G * sinf(r) - G * sinf(p)) * q;  // 左前轮：横滚负向、俯仰负向
-  o[1] = (G * sinf(r) - G * sinf(p)) * q;   // 右前轮：横滚正向、俯仰负向
-  o[2] = (G * sinf(r) + G * sinf(p)) * q;   // 右后轮：横滚正向、俯仰正向
-  o[3] = (-G * sinf(r) + G * sinf(p)) * q;  // 左后轮：横滚负向、俯仰正向
+  o[0] = (-G * sinf(r) - G * sinf(p)) * q; // 左前轮：横滚负向、俯仰负向
+  o[1] = (G * sinf(r) - G * sinf(p)) * q;  // 右前轮：横滚正向、俯仰负向
+  o[2] = (-G * sinf(r) + G * sinf(p)) * q; // 左后轮：横滚负向、俯仰正向
+  o[3] = (G * sinf(r) + G * sinf(p)) * q;  // 右后轮：横滚正向、俯仰正向
 }
