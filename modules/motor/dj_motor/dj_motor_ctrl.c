@@ -239,6 +239,7 @@ err_t dj_motor_set_command(dj_motor_t *motor, int16_t command) {
   if ((group->group_mask != 0U) &&
       (group->pending_mask == group->group_mask)) {
     memcpy(snapshot, group->tx_buff, sizeof(snapshot));
+    group->pending_mask = 0U;
     should_send = true;
   }
   taskEXIT_CRITICAL();
